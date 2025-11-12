@@ -1,0 +1,28 @@
+[versions]
+
+# general
+lombok = "1.18.42"
+jetbrains-annotations = "26.0.2"
+
+# cloud
+cloud = "2.0.0"
+cloud-cooldown = "1.0.0-rc.1"
+cloud-minecraft-extras = "2.0.0-beta.13"
+
+# adventure
+adventure = "4.17.0"
+
+[libraries]
+
+# general
+lombok = { group = "org.projectlombok", name = "lombok", version.ref = "lombok" }
+jetbrains-annotations = { group = "org.jetbrains", name = "annotations", version.ref = "jetbrains-annotations" }
+
+# cloud
+cloud-core = { group = "org.incendo", name = "cloud-core", version.ref = "cloud" }
+cloud-cooldowns = { group = "org.incendo", name = "cloud-processors-cooldown", version.ref = "cloud-cooldown" }
+cloud-minecraft-extras = { group = "org.incendo", name = "cloud-minecraft-extras", version.ref = "cloud-minecraft-extras" }
+
+# adventure
+adventure-api = { group = "net.kyori", name = "adventure-api", version.ref = "adventure" }
+
