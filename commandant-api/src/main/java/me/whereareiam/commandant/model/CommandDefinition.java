@@ -39,4 +39,3 @@ public class CommandDefinition {
 		private String group = "default";
 	}
 }
-

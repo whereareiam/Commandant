@@ -15,6 +15,7 @@ subprojects {
     repositories {
         mavenCentral()
         maven("https://maven.whereareiam.me/release")
+        maven("https://maven.whereareiam.me/development")
         maven("https://oss.sonatype.org/content/repositories/snapshots/")
     }
 
@@ -28,6 +29,7 @@ subprojects {
         "compileOnly"(rootProject.libs.adventure.api)
         "compileOnly"(rootProject.libs.cloud.core)
         "compileOnly"(rootProject.libs.cloud.minecraft.extras)
+        "compileOnly"(rootProject.libs.keystone)
     }
 
     extensions.configure<PublishingExtension> {
@@ -45,4 +47,3 @@ subprojects {
         }
     }
 }
-

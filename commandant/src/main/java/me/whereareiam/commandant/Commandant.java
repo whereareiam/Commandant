@@ -2,13 +2,13 @@ package me.whereareiam.commandant;
 
 import me.whereareiam.commandant.common.DefaultCommandRegistrar;
 import me.whereareiam.commandant.model.CommandDefinition;
+import me.whereareiam.commandant.model.CommandSender;
 import org.incendo.cloud.CommandManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.Function;
 
 /**
@@ -18,19 +18,18 @@ import java.util.function.Function;
 @SuppressWarnings("unused")
 public final class Commandant {
 	/**
-	 * Creates a new CommandRegistrar instance.
+	 * Creates a new CommandRegistrar instance for CommandSender types.
+	 * Uses CommandSender.getUniqueId() automatically for cooldown tracking.
 	 *
 	 * @param commandManager The command manager to register commands with
-	 * @param uuidExtractor  Function to extract UUID from sender for cooldown tracking
-	 * @param <S>            The sender type
+	 * @param <S>            The sender type (must extend CommandSender)
 	 * @return A new CommandRegistrar instance
 	 */
 	@NotNull
-	public static <S> CommandRegistrar<S> createRegistrar(
-			@NotNull CommandManager<S> commandManager,
-			@NotNull Function<S, UUID> uuidExtractor
+	public static <S extends CommandSender> CommandRegistrar<S> createRegistrar(
+			@NotNull CommandManager<S> commandManager
 	) {
-		return DefaultCommandRegistrar.create(commandManager, uuidExtractor);
+		return DefaultCommandRegistrar.create(commandManager, CommandSender::getUniqueId);
 	}
 
 	/**
@@ -76,4 +75,3 @@ public final class Commandant {
 				&& Objects.equals(def1.getDescription(), def2.getDescription());
 	}
 }
-

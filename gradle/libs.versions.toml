@@ -3,6 +3,7 @@
 # general
 lombok = "1.18.42"
 jetbrains-annotations = "26.0.2"
+keystone = "dev-511c139"
 
 # cloud
 cloud = "2.0.0"
@@ -17,6 +18,7 @@ adventure = "4.17.0"
 # general
 lombok = { group = "org.projectlombok", name = "lombok", version.ref = "lombok" }
 jetbrains-annotations = { group = "org.jetbrains", name = "annotations", version.ref = "jetbrains-annotations" }
+keystone = { group = "me.whereareiam", name = "keystone", version.ref = "keystone" }
 
 # cloud
 cloud-core = { group = "org.incendo", name = "cloud-core", version.ref = "cloud" }
@@ -25,4 +27,3 @@ cloud-minecraft-extras = { group = "org.incendo", name = "cloud-minecraft-extras
 
 # adventure
 adventure-api = { group = "net.kyori", name = "adventure-api", version.ref = "adventure" }
-
