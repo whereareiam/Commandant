@@ -1,6 +1,7 @@
-package me.whereareiam.commandant;
+package me.whereareiam.commandant.common;
 
-import me.whereareiam.commandant.model.ExceptionMessages;
+import me.whereareiam.commandant.CommandMessageFormatter;
+import me.whereareiam.commandant.model.message.ExceptionMessages;
 import net.kyori.adventure.text.Component;
 import org.incendo.cloud.CommandManager;
 import org.incendo.cloud.exception.*;
@@ -54,8 +55,8 @@ public class CommandExceptionHandler<S> {
 	/**
 	 * Creates a new CommandExceptionHandler.
 	 *
-	 * @param exceptionMessages The exception messages configuration
-	 * @param messageFormatter  The formatter to use for formatting command exception messages
+	 * @param exceptionMessages The exception message configuration
+	 * @param messageFormatter  The formatter to use for formatting command exception message
 	 */
 	public CommandExceptionHandler(
 			@NotNull ExceptionMessages exceptionMessages,
@@ -176,8 +177,8 @@ public class CommandExceptionHandler<S> {
 	 * Creates and registers a CommandExceptionHandler with the given command manager.
 	 * This is a convenience static method that handles everything in one call.
 	 *
-	 * @param exceptionMessages The exception messages configuration
-	 * @param messageFormatter  The formatter to use for formatting command exception messages
+	 * @param exceptionMessages The exception message configuration
+	 * @param messageFormatter  The formatter to use for formatting command exception message
 	 * @param commandManager    The command manager to register handlers with
 	 * @param audienceProvider  Provider to convert the sender to an Audience (can be a method reference like DummyPlayer::getAudience)
 	 * @param <S>               The sender type (e.g., DummyPlayer, CommandSender, Audience)
@@ -192,4 +193,3 @@ public class CommandExceptionHandler<S> {
 		handler.registerTo(commandManager, audienceProvider);
 	}
 }
-

@@ -1,11 +1,11 @@
-package me.whereareiam.commandant.model;
+package me.whereareiam.commandant.model.message;
 
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
 /**
- * Configuration model for exception-related messages.
+ * Configuration model for exception-related message.
  */
 @Getter
 @Setter

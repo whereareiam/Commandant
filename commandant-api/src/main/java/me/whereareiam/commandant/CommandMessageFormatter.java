@@ -4,8 +4,8 @@ import net.kyori.adventure.text.Component;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Functional interface for formatting command exception messages with placeholders.
- * Used by CommandExceptionHandler to format exception messages for commands.
+ * Functional interface for formatting command exception message with placeholders.
+ * Used by CommandExceptionHandler to format exception message for commands.
  *
  * @param <S> The sender type (e.g., DummyPlayer, CommandSender)
  */
