@@ -1,15 +1,16 @@
 package me.whereareiam.commandant.model;
 
+import me.whereareiam.keystone.model.Actor;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.UUID;
 
 /**
  * Represents the console command sender.
- * This is for server console command execution.
+ * Extends Actor for console command execution.
  */
 @SuppressWarnings("unused")
-public interface Console extends CommandSender {
+public interface Console extends Actor {
 	/**
 	 * Console UUID constant for cooldown tracking.
 	 */

@@ -2,7 +2,7 @@ package me.whereareiam.commandant;
 
 import me.whereareiam.commandant.common.DefaultCommandRegistrar;
 import me.whereareiam.commandant.model.CommandDefinition;
-import me.whereareiam.commandant.model.CommandSender;
+import me.whereareiam.keystone.model.Actor;
 import org.incendo.cloud.CommandManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -18,18 +18,18 @@ import java.util.function.Function;
 @SuppressWarnings("unused")
 public final class Commandant {
 	/**
-	 * Creates a new CommandRegistrar instance for CommandSender types.
-	 * Uses CommandSender.getUniqueId() automatically for cooldown tracking.
+	 * Creates a new CommandRegistrar instance for Actor types.
+	 * Uses Actor.getUniqueId() automatically for cooldown tracking.
 	 *
 	 * @param commandManager The command manager to register commands with
-	 * @param <S>            The sender type (must extend CommandSender)
+	 * @param <S>            The sender type (must extend Actor)
 	 * @return A new CommandRegistrar instance
 	 */
 	@NotNull
-	public static <S extends CommandSender> CommandRegistrar<S> createRegistrar(
+	public static <S extends Actor> CommandRegistrar<S> createRegistrar(
 			@NotNull CommandManager<S> commandManager
 	) {
-		return DefaultCommandRegistrar.create(commandManager, CommandSender::getUniqueId);
+		return DefaultCommandRegistrar.create(commandManager, Actor::getUniqueId);
 	}
 
 	/**
