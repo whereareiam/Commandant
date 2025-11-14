@@ -91,17 +91,21 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 			@NotNull List<String> aliases,
 			@NotNull Consumer<CommandContext<S>> handler
 	) {
-		for (String alias : aliases) {
-			Command.Builder<S> builder = commandManager.commandBuilder(rootCommand)
-					.literal(alias)
-					.commandDescription(Description.of(definition.getDescription() != null
-							? definition.getDescription()
-							: ""
-					));
+		// Use first alias as main name, rest as aliases
+		String mainAlias = aliases.get(0);
+		String[] remainingAliases = aliases.size() > 1
+				? aliases.subList(1, aliases.size()).toArray(new String[0])
+				: new String[0];
 
-			applyCommandProperties(builder, definition);
-			registerBuiltCommand(builder, handler);
-		}
+		Command.Builder<S> builder = commandManager.commandBuilder(rootCommand)
+				.literal(mainAlias, remainingAliases)
+				.commandDescription(Description.of(definition.getDescription() != null
+						? definition.getDescription()
+						: ""
+				));
+
+		applyCommandProperties(builder, definition);
+		registerBuiltCommand(builder, handler);
 	}
 
 	private void registerRootCommand(
@@ -109,13 +113,17 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 			@NotNull List<String> aliases,
 			@NotNull Consumer<CommandContext<S>> handler
 	) {
-		for (String alias : aliases) {
-			Command.Builder<S> builder = commandManager.commandBuilder(alias)
-					.commandDescription(Description.of(definition.getDescription() != null ? definition.getDescription() : ""));
+		// Use first alias as main name, rest as aliases
+		String mainAlias = aliases.get(0);
+		String[] remainingAliases = aliases.size() > 1
+				? aliases.subList(1, aliases.size()).toArray(new String[0])
+				: new String[0];
 
-			applyCommandProperties(builder, definition);
-			registerBuiltCommand(builder, handler);
-		}
+		Command.Builder<S> builder = commandManager.commandBuilder(mainAlias, remainingAliases)
+				.commandDescription(Description.of(definition.getDescription() != null ? definition.getDescription() : ""));
+
+		applyCommandProperties(builder, definition);
+		registerBuiltCommand(builder, handler);
 	}
 
 	private void applyCommandProperties(
