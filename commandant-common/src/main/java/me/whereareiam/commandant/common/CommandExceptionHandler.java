@@ -1,7 +1,8 @@
 package me.whereareiam.commandant.common;
 
-import me.whereareiam.commandant.CommandMessageFormatter;
 import me.whereareiam.commandant.model.message.ExceptionMessages;
+import me.whereareiam.keystone.Actor;
+import me.whereareiam.keystone.serializer.SerializerEngine;
 import net.kyori.adventure.text.Component;
 import org.incendo.cloud.CommandManager;
 import org.incendo.cloud.exception.*;
@@ -17,22 +18,19 @@ import org.jetbrains.annotations.NotNull;
 /**
  * Generic exception handler for command exceptions using ExceptionMessages configuration.
  * This handler can be used across different plugins (Socialismus, Intercept, etc.)
- * by providing a CommandMessageFormatter implementation.
+ * by providing a SerializerEngine implementation.
  *
  * <p>Usage example:
  * <pre>{@code
  * // Get ExceptionMessages from your config
  * ExceptionMessages exceptionMessages = config.getCommands().getExceptions();
  *
- * // Create a CommandMessageFormatter that works with your serialization system
- * CommandMessageFormatter<DummyPlayer> formatter = (sender, message, content) ->
- *     Serializer.serialize(new SerializerContent(sender, List.of(
- *         new SerializerPlaceholder("{content}", content)
- *     ), message));
+ * // Get SerializerEngine from your serialization system
+ * SerializerEngine serializer = KeystoneSerializers.createEngine(options);
  *
  * // Create the handler
  * CommandExceptionHandler<DummyPlayer> handler = new CommandExceptionHandler<>(
- *     exceptionMessages, formatter
+ *     exceptionMessages, serializer
  * );
  *
  * // Register with MinecraftExceptionHandler
@@ -45,25 +43,25 @@ import org.jetbrains.annotations.NotNull;
  *     .registerTo(commandManager);
  * }</pre>
  *
- * @param <S> The sender type (e.g., DummyPlayer, CommandSender)
+ * @param <S> The sender type (must extend Actor, e.g., DummyPlayer)
  */
 @SuppressWarnings("unused")
-public class CommandExceptionHandler<S> {
+public class CommandExceptionHandler<S extends Actor> {
 	private final ExceptionMessages exceptionMessages;
-	private final CommandMessageFormatter<S> messageFormatter;
+	private final SerializerEngine serializer;
 
 	/**
 	 * Creates a new CommandExceptionHandler.
 	 *
 	 * @param exceptionMessages The exception message configuration
-	 * @param messageFormatter  The formatter to use for formatting command exception message
+	 * @param serializer        The serializer engine to use for formatting command exception messages
 	 */
 	public CommandExceptionHandler(
 			@NotNull ExceptionMessages exceptionMessages,
-			@NotNull CommandMessageFormatter<S> messageFormatter
+			@NotNull SerializerEngine serializer
 	) {
 		this.exceptionMessages = exceptionMessages;
-		this.messageFormatter = messageFormatter;
+		this.serializer = serializer;
 	}
 
 	/**
@@ -81,13 +79,13 @@ public class CommandExceptionHandler<S> {
 		Throwable cause = exception.exception().getCause();
 
 		if (cause instanceof BooleanParser.BooleanParseException e)
-			return messageFormatter.format(sender, exceptionMessages.getInvalidSyntaxBoolean(), e.input());
+			return serializer.serialize(sender, exceptionMessages.getInvalidSyntaxBoolean(), builder -> builder.placeholder("{content}", e.input()));
 
 		if (cause instanceof NumberParseException e)
-			return messageFormatter.format(sender, exceptionMessages.getInvalidSyntaxNumber(), e.input());
+			return serializer.serialize(sender, exceptionMessages.getInvalidSyntaxNumber(), builder -> builder.placeholder("{content}", e.input()));
 
 		if (cause instanceof StringParser.StringParseException e)
-			return messageFormatter.format(sender, exceptionMessages.getInvalidSyntaxString(), e.input());
+			return serializer.serialize(sender, exceptionMessages.getInvalidSyntaxString(), builder -> builder.placeholder("{content}", e.input()));
 
 		// Fallback for unknown parse exceptions
 		return Component.text("Unknown parse exception occurred: " + cause.getMessage());
@@ -104,7 +102,7 @@ public class CommandExceptionHandler<S> {
 			@NotNull ComponentCaptionFormatter<S> formatter,
 			@NotNull ExceptionContext<S, InvalidCommandSenderException> exception
 	) {
-		return messageFormatter.format(exception.context().sender(), exceptionMessages.getInvalidSender(), "");
+		return serializer.serialize(exception.context().sender(), exceptionMessages.getInvalidSender(), builder -> builder.placeholder("{content}", ""));
 	}
 
 	/**
@@ -119,7 +117,7 @@ public class CommandExceptionHandler<S> {
 			@NotNull ExceptionContext<S, NoPermissionException> exception
 	) {
 		String permission = exception.exception().missingPermission().permissionString();
-		return messageFormatter.format(exception.context().sender(), exceptionMessages.getNoPermission(), permission);
+		return serializer.serialize(exception.context().sender(), exceptionMessages.getNoPermission(), builder -> builder.placeholder("{content}", permission));
 	}
 
 	/**
@@ -134,7 +132,7 @@ public class CommandExceptionHandler<S> {
 			@NotNull ExceptionContext<S, InvalidSyntaxException> exception
 	) {
 		String syntax = exception.exception().correctSyntax().replace("|", "/");
-		return messageFormatter.format(exception.context().sender(), exceptionMessages.getInvalidSyntax(), syntax);
+		return serializer.serialize(exception.context().sender(), exceptionMessages.getInvalidSyntax(), builder -> builder.placeholder("{content}", syntax));
 	}
 
 	/**
@@ -150,7 +148,7 @@ public class CommandExceptionHandler<S> {
 	) {
 		exception.exception().printStackTrace();
 		String errorMessage = exception.exception().getMessage();
-		return messageFormatter.format(exception.context().sender(), exceptionMessages.getExecutionError(), errorMessage);
+		return serializer.serialize(exception.context().sender(), exceptionMessages.getExecutionError(), builder -> builder.placeholder("{content}", errorMessage));
 	}
 
 	/**
@@ -178,18 +176,18 @@ public class CommandExceptionHandler<S> {
 	 * This is a convenience static method that handles everything in one call.
 	 *
 	 * @param exceptionMessages The exception message configuration
-	 * @param messageFormatter  The formatter to use for formatting command exception message
+	 * @param serializer        The serializer engine to use for formatting command exception messages
 	 * @param commandManager    The command manager to register handlers with
 	 * @param audienceProvider  Provider to convert the sender to an Audience (can be a method reference like DummyPlayer::getAudience)
-	 * @param <S>               The sender type (e.g., DummyPlayer, CommandSender, Audience)
+	 * @param <S>               The sender type (must extend Actor, e.g., DummyPlayer)
 	 */
-	public static <S> void register(
+	public static <S extends Actor> void register(
 			@NotNull ExceptionMessages exceptionMessages,
-			@NotNull CommandMessageFormatter<S> messageFormatter,
+			@NotNull SerializerEngine serializer,
 			@NotNull CommandManager<S> commandManager,
 			@NotNull AudienceProvider<S> audienceProvider
 	) {
-		CommandExceptionHandler<S> handler = new CommandExceptionHandler<>(exceptionMessages, messageFormatter);
+		CommandExceptionHandler<S> handler = new CommandExceptionHandler<>(exceptionMessages, serializer);
 		handler.registerTo(commandManager, audienceProvider);
 	}
 }

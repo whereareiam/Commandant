@@ -1,6 +1,6 @@
 package me.whereareiam.commandant.model;
 
-import me.whereareiam.keystone.model.Actor;
+import me.whereareiam.keystone.Actor;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.UUID;

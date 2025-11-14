@@ -4,7 +4,8 @@ import me.whereareiam.commandant.common.CommandExceptionHandler;
 import me.whereareiam.commandant.common.DefaultCommandRegistrar;
 import me.whereareiam.commandant.model.CommandDefinition;
 import me.whereareiam.commandant.model.message.ExceptionMessages;
-import me.whereareiam.keystone.model.Actor;
+import me.whereareiam.keystone.Actor;
+import me.whereareiam.keystone.serializer.SerializerEngine;
 import org.incendo.cloud.CommandManager;
 import org.incendo.cloud.minecraft.extras.AudienceProvider;
 import org.jetbrains.annotations.NotNull;
@@ -61,18 +62,18 @@ public final class Commandant {
 	 * Creates and registers a CommandExceptionHandler with the given command manager.
 	 *
 	 * @param exceptionMessages The exception message configuration
-	 * @param messageFormatter  The formatter to use for formatting command exception message
+	 * @param serializer        The serializer engine to use for formatting command exception messages
 	 * @param commandManager    The command manager to register handlers with
 	 * @param audienceProvider  Provider to convert the sender to an Audience
-	 * @param <S>               The sender type
+	 * @param <S>               The sender type (must extend Actor)
 	 */
-	public static <S> void registerExceptionHandler(
+	public static <S extends Actor> void registerExceptionHandler(
 			@NotNull ExceptionMessages exceptionMessages,
-			@NotNull CommandMessageFormatter<S> messageFormatter,
+			@NotNull SerializerEngine serializer,
 			@NotNull CommandManager<S> commandManager,
 			@NotNull AudienceProvider<S> audienceProvider
 	) {
-		CommandExceptionHandler.register(exceptionMessages, messageFormatter, commandManager, audienceProvider);
+		CommandExceptionHandler.register(exceptionMessages, serializer, commandManager, audienceProvider);
 	}
 
 	/**
