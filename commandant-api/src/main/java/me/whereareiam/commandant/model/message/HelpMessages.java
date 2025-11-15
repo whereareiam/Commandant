@@ -54,6 +54,13 @@ public class HelpMessages {
 	private Format argumentFormat;
 
 	/**
+	 * Number of commands to display per help page.
+	 * <p>
+	 * Default: 7
+	 */
+	private int commandsPerPage = 7;
+
+	/**
 	 * Configuration for formatting command arguments.
 	 */
 	@Getter

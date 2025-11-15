@@ -16,6 +16,52 @@ import java.util.Map;
 @SuppressWarnings("unused")
 public final class Help {
 	/**
+	 * Creates a HelpBuilder with the given configuration, using the commands per page defined in {@link HelpMessages}.
+	 *
+	 * @param helpMessages        The help message configuration
+	 * @param customArgumentNames Optional map of argument names to custom display names
+	 * @param paginationBuilder   Optional pagination builder for multi-page help
+	 * @param <S>                 The sender type
+	 * @return A new HelpBuilder instance
+	 */
+	@NotNull
+	public static <S> HelpBuilder<S> create(
+			@NotNull HelpMessages helpMessages,
+			@Nullable Map<String, String> customArgumentNames,
+			@Nullable PaginationBuilder paginationBuilder
+	) {
+		return create(helpMessages, customArgumentNames, paginationBuilder, helpMessages.getCommandsPerPage());
+	}
+
+	/**
+	 * Creates a HelpBuilder without pagination, using the commands per page defined in {@link HelpMessages}.
+	 *
+	 * @param helpMessages        The help message configuration
+	 * @param customArgumentNames Optional map of argument names to custom display names
+	 * @param <S>                 The sender type
+	 * @return A new HelpBuilder instance
+	 */
+	@NotNull
+	public static <S> HelpBuilder<S> create(
+			@NotNull HelpMessages helpMessages,
+			@Nullable Map<String, String> customArgumentNames
+	) {
+		return create(helpMessages, customArgumentNames, null, helpMessages.getCommandsPerPage());
+	}
+
+	/**
+	 * Creates a HelpBuilder with minimal configuration, using the commands per page defined in {@link HelpMessages}.
+	 *
+	 * @param helpMessages The help message configuration
+	 * @param <S>          The sender type
+	 * @return A new HelpBuilder instance
+	 */
+	@NotNull
+	public static <S> HelpBuilder<S> create(@NotNull HelpMessages helpMessages) {
+		return create(helpMessages, null, null, helpMessages.getCommandsPerPage());
+	}
+
+	/**
 	 * Creates a HelpBuilder with the given configuration.
 	 *
 	 * @param helpMessages        The help message configuration
