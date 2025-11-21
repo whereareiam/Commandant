@@ -15,11 +15,13 @@ import org.jetbrains.annotations.Nullable;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Implementation of CommandRegistrar for programmatically registering commands with Cloud CommandManager.
@@ -91,21 +93,46 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 			@NotNull List<String> aliases,
 			@NotNull Consumer<CommandContext<S>> handler
 	) {
-		// Use first alias as main name, rest as aliases
-		String mainAlias = aliases.get(0);
-		String[] remainingAliases = aliases.size() > 1
-				? aliases.subList(1, aliases.size()).toArray(new String[0])
-				: new String[0];
+		// Split aliases into parts (handle multi-word aliases like "database upload")
+		// Group aliases by number of parts, as aliases with different lengths need separate registration
+		Map<Integer, List<List<String>>> aliasesByLength = aliases.stream()
+				.map(alias -> List.of(alias.split("\\s+")))
+				.collect(Collectors.groupingBy(List::size));
+		
+		// Register each group of aliases (with the same number of parts) separately
+		// This handles cases like ["database upload", "upload"] where lengths differ
+		for (Map.Entry<Integer, List<List<String>>> entry : aliasesByLength.entrySet()) {
+			List<List<String>> aliasParts = entry.getValue();
+			
+			// Build the command chain by chaining literals
+			// Group aliases by position to create alternatives at each level
+			int numParts = entry.getKey();
+			Command.Builder<S> builder = commandManager.commandBuilder(rootCommand);
+			
+			for (int i = 0; i < numParts; i++) {
+				final int position = i;
+				List<String> alternatives = aliasParts.stream()
+						.map(parts -> parts.get(position))
+						.distinct()
+						.toList();
+				
+				if (!alternatives.isEmpty()) {
+					String mainLiteral = alternatives.get(0);
+					String[] remainingLiterals = alternatives.size() > 1
+							? alternatives.subList(1, alternatives.size()).toArray(new String[0])
+							: new String[0];
+					builder = builder.literal(mainLiteral, remainingLiterals);
+				}
+			}
+			
+			builder = builder.commandDescription(Description.of(definition.getDescription() != null
+					? definition.getDescription()
+					: ""
+			));
 
-		Command.Builder<S> builder = commandManager.commandBuilder(rootCommand)
-				.literal(mainAlias, remainingAliases)
-				.commandDescription(Description.of(definition.getDescription() != null
-						? definition.getDescription()
-						: ""
-				));
-
-		applyCommandProperties(builder, definition);
-		registerBuiltCommand(builder, handler);
+			applyCommandProperties(builder, definition);
+			registerBuiltCommand(builder, handler);
+		}
 	}
 
 	private void registerRootCommand(
