@@ -78,7 +78,29 @@ public final class Help {
 			@Nullable PaginationBuilder paginationBuilder,
 			int itemsPerPage
 	) {
-		return new DefaultHelpBuilder<>(helpMessages, customArgumentNames, paginationBuilder, itemsPerPage);
+		return create(helpMessages, customArgumentNames, paginationBuilder, itemsPerPage, false);
+	}
+
+	/**
+	 * Creates a HelpBuilder with the given configuration.
+	 *
+	 * @param helpMessages        The help message configuration
+	 * @param customArgumentNames Optional map of argument names to custom display names
+	 * @param paginationBuilder   Optional pagination builder for multi-page help
+	 * @param itemsPerPage        Number of commands to display per page
+	 * @param sortAlphabetically  Whether to sort commands alphabetically by name
+	 * @param <S>                 The sender type
+	 * @return A new HelpBuilder instance
+	 */
+	@NotNull
+	public static <S> HelpBuilder<S> create(
+			@NotNull HelpMessages helpMessages,
+			@Nullable Map<String, String> customArgumentNames,
+			@Nullable PaginationBuilder paginationBuilder,
+			int itemsPerPage,
+			boolean sortAlphabetically
+	) {
+		return new DefaultHelpBuilder<>(helpMessages, customArgumentNames, paginationBuilder, itemsPerPage, sortAlphabetically);
 	}
 
 	/**
@@ -96,7 +118,7 @@ public final class Help {
 			@Nullable Map<String, String> customArgumentNames,
 			int itemsPerPage
 	) {
-		return new DefaultHelpBuilder<>(helpMessages, customArgumentNames, null, itemsPerPage);
+		return create(helpMessages, customArgumentNames, null, itemsPerPage, false);
 	}
 
 	/**
@@ -109,6 +131,6 @@ public final class Help {
 	 */
 	@NotNull
 	public static <S> HelpBuilder<S> create(@NotNull HelpMessages helpMessages, int itemsPerPage) {
-		return new DefaultHelpBuilder<>(helpMessages, null, null, itemsPerPage);
+		return create(helpMessages, null, null, itemsPerPage, false);
 	}
 }

@@ -39,6 +39,7 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 	private final Map<String, String> customArgumentNames;
 	private final PaginationBuilder paginationBuilder;
 	private final int itemsPerPage;
+	private final boolean sortAlphabetically;
 
 	/**
 	 * Creates a new DefaultHelpBuilder with the given configuration.
@@ -47,17 +48,20 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 	 * @param customArgumentNames Map of argument names to custom display names (can be null or empty)
 	 * @param paginationBuilder   The pagination builder (can be null to disable pagination)
 	 * @param itemsPerPage        Number of commands to display per page
+	 * @param sortAlphabetically  Whether to sort commands alphabetically by name
 	 */
 	public DefaultHelpBuilder(
 			@NotNull HelpMessages messages,
 			@Nullable Map<String, String> customArgumentNames,
 			@Nullable PaginationBuilder paginationBuilder,
-			int itemsPerPage
+			int itemsPerPage,
+			boolean sortAlphabetically
 	) {
 		this.messages = messages;
 		this.customArgumentNames = customArgumentNames != null ? customArgumentNames : Map.of();
 		this.paginationBuilder = paginationBuilder;
 		this.itemsPerPage = itemsPerPage;
+		this.sortAlphabetically = sortAlphabetically;
 	}
 
 	@Override
@@ -97,7 +101,13 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 
 		long skip = (long) (page - 1) * itemsPerPage;
 
-		List<String> commandDescriptions = commands.stream()
+		var commandStream = commands.stream();
+		if (sortAlphabetically) {
+			commandStream = commandStream.sorted((c1, c2) ->
+					buildCommandKey(c1).compareToIgnoreCase(buildCommandKey(c2)));
+		}
+
+		List<String> commandDescriptions = commandStream
 				.skip(skip)
 				.limit(itemsPerPage)
 				.map(this::formatCommand)
@@ -171,6 +181,13 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 			case OPTIONAL_VARIABLE -> format.getOptionalArgument().replace("{argument}", argumentName);
 			default -> argumentName;
 		};
+	}
+
+	@NotNull
+	private String buildCommandKey(@NotNull Command<S> command) {
+		return command.nonFlagArguments().stream()
+				.map(CommandComponent::name)
+				.collect(Collectors.joining(" "));
 	}
 }
 
