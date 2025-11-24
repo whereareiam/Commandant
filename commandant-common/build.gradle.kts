@@ -4,6 +4,7 @@ dependencies {
     "compileOnly"(libs.cloud.core)
     "compileOnly"(libs.cloud.cooldowns)
     "compileOnly"(libs.cloud.minecraft.extras)
+    "compileOnly"(libs.cloud.annotations)
 
     // Testing
     "testImplementation"(libs.junit.jupiter)
@@ -12,6 +13,7 @@ dependencies {
     "testImplementation"(libs.mockito.junit)
     "testImplementation"(libs.cloud.core)
     "testImplementation"(libs.cloud.cooldowns)
+    "testImplementation"(libs.cloud.annotations)
 }
 
 tasks.test {

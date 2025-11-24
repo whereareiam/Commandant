@@ -1,7 +1,8 @@
 package me.whereareiam.commandant.common;
 
-import me.whereareiam.commandant.CommandRegistrar;
+import me.whereareiam.commandant.common.registration.type.ProgrammaticRegistrar;
 import me.whereareiam.commandant.model.CommandDefinition;
+import me.whereareiam.commandant.registration.type.ProgrammaticCommandRegistrar;
 import org.incendo.cloud.Command;
 import org.incendo.cloud.CommandManager;
 import org.incendo.cloud.component.CommandComponent;
@@ -19,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class DefaultCommandRegistrarTest {
 
 	private CommandManager<TestCommandSender> commandManager;
-	private CommandRegistrar<TestCommandSender> registrar;
+	private ProgrammaticCommandRegistrar<TestCommandSender> registrar;
 
 	@BeforeEach
 	void setUp() {
@@ -36,7 +37,7 @@ class DefaultCommandRegistrarTest {
 			}
 		};
 
-		this.registrar = DefaultCommandRegistrar.create(
+		this.registrar = ProgrammaticRegistrar.create(
 				commandManager,
 				TestCommandSender::getUuid
 		);
@@ -282,7 +283,7 @@ class DefaultCommandRegistrarTest {
 
 	@Test
 	void testUsageWithPlaceholderNotSubcommand() {
-		// Usage contains {command} but no root command is set, so it should register as root command
+		// Usage contains {command} but no root command is set, so it should registration as root command
 		CommandDefinition definition = CommandDefinition.builder()
 				.enabled(true)
 				.aliases(List.of("test"))
@@ -295,4 +296,5 @@ class DefaultCommandRegistrarTest {
 		assertEquals(1, command.components().size()); // Only root, no subcommand
 		assertEquals("test", command.components().get(0).name());
 	}
+
 }

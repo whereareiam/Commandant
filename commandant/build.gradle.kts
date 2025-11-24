@@ -1,6 +1,8 @@
 dependencies {
     api(project(":commandant-api"))
     implementation(project(":commandant-common"))
+
+    compileOnly(libs.cloud.annotations)
 }
 
 publishing {

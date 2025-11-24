@@ -28,6 +28,7 @@ keystone = { group = "me.whereareiam", name = "keystone", version.ref = "keyston
 cloud-core = { group = "org.incendo", name = "cloud-core", version.ref = "cloud" }
 cloud-cooldowns = { group = "org.incendo", name = "cloud-processors-cooldown", version.ref = "cloud-cooldown" }
 cloud-minecraft-extras = { group = "org.incendo", name = "cloud-minecraft-extras", version.ref = "cloud-minecraft-extras" }
+cloud-annotations = { group = "org.incendo", name = "cloud-annotations", version.ref = "cloud" }
 
 # adventure
 adventure-api = { group = "net.kyori", name = "adventure-api", version.ref = "adventure" }

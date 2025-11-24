@@ -8,7 +8,7 @@ import java.util.Map;
 
 /**
  * Model representing a command definition.
- * Contains all the properties needed to register a command.
+ * Contains all the properties needed to registration a command.
  */
 @Getter
 @Setter

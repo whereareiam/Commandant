@@ -1,6 +1,5 @@
-package me.whereareiam.commandant.common;
+package me.whereareiam.commandant.common.registration;
 
-import me.whereareiam.commandant.CommandRegistrar;
 import me.whereareiam.commandant.model.CommandDefinition;
 import org.incendo.cloud.Command;
 import org.incendo.cloud.CommandManager;
@@ -24,23 +23,17 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Implementation of CommandRegistrar for programmatically registering commands with Cloud CommandManager.
+ * Shared registration pipeline that converts {@link CommandDefinition} objects into Cloud commands.
  *
- * @param <S> The sender type (e.g., DummyPlayer, CommandSender, Audience)
+ * @param <S> sender type
  */
-public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
+public final class CommandDefinitionRegistration<S> {
 	private final CommandManager<S> commandManager;
 	private final Function<S, UUID> uuidExtractor;
 	private final Function<String, SuggestionProvider<S>> suggestionResolver;
 	private String rootCommand;
 
-	/**
-	 * Creates a new CommandRegistrar.
-	 *
-	 * @param commandManager The command manager to register commands with
-	 * @param uuidExtractor  Function to extract UUID from sender for cooldown tracking
-	 */
-	private DefaultCommandRegistrar(
+	public CommandDefinitionRegistration(
 			@NotNull CommandManager<S> commandManager,
 			@NotNull Function<S, UUID> uuidExtractor,
 			@NotNull Function<String, SuggestionProvider<S>> suggestionResolver
@@ -53,79 +46,66 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 		commandManager.registerCommandPostProcessor(cooldownManager.createPostprocessor());
 	}
 
-	/**
-	 * Creates a new CommandRegistrar instance.
-	 *
-	 * @param commandManager The command manager to register commands with
-	 * @param uuidExtractor  Function to extract UUID from sender for cooldown tracking
-	 * @param <S>            The sender type
-	 * @return A new CommandRegistrar instance
-	 */
-	@NotNull
-	public static <S> CommandRegistrar<S> create(
-			@NotNull CommandManager<S> commandManager,
-			@NotNull Function<S, UUID> uuidExtractor
-	) {
-		return create(commandManager, uuidExtractor, name -> null);
-	}
-
-	@NotNull
-	public static <S> CommandRegistrar<S> create(
-			@NotNull CommandManager<S> commandManager,
-			@NotNull Function<S, UUID> uuidExtractor,
-			@NotNull Function<String, SuggestionProvider<S>> suggestionResolver
-	) {
-		return new DefaultCommandRegistrar<>(commandManager, uuidExtractor, suggestionResolver);
-	}
-
-	@Override
-	public void registerCommand(
+	public void register(
 			@NotNull CommandDefinition definition,
 			@NotNull Consumer<CommandContext<S>> handler
+	) {
+		registerWithFactory(definition, components -> handler::accept);
+	}
+
+	public void registerWithFactory(
+			@NotNull CommandDefinition definition,
+			@NotNull HandlerFactory<S> handlerFactory
 	) {
 		if (!definition.isEnabled()) return;
 
 		List<String> aliases = definition.getAliases();
 		if (aliases == null || aliases.isEmpty()) throw new IllegalArgumentException("Command aliases cannot be empty");
 
-		// Check if usage contains {command} to determine if it should be a subcommand
 		boolean isSubcommand = rootCommand != null
 				&& definition.getUsage() != null
 				&& definition.getUsage().contains("{command}");
 
 		if (isSubcommand) {
-			registerSubcommand(definition, aliases, handler);
-			return;
+			registerSubcommand(definition, aliases, handlerFactory);
+		} else {
+			registerRootCommand(definition, aliases, handlerFactory);
 		}
+	}
 
-		registerRootCommand(definition, aliases, handler);
+	public void setRootCommand(@NotNull String rootCommandName) {
+		this.rootCommand = rootCommandName;
+	}
+
+	@Nullable
+	public String getRootCommand() {
+		return rootCommand;
+	}
+
+	@NotNull
+	public CommandManager<S> getCommandManager() {
+		return commandManager;
 	}
 
 	private void registerSubcommand(
 			@NotNull CommandDefinition definition,
 			@NotNull List<String> aliases,
-			@NotNull Consumer<CommandContext<S>> handler
+			@NotNull HandlerFactory<S> handlerFactory
 	) {
-		// Split aliases into parts (handle multi-word aliases like "database upload")
-		// Group aliases by number of parts, as aliases with different lengths need separate registration
 		Map<Integer, List<List<String>>> aliasesByLength = aliases.stream()
 				.map(alias -> List.of(alias.split("\\s+")))
 				.collect(Collectors.groupingBy(List::size));
 
-		// Register each group of aliases (with the same number of parts) separately
-		// This handles cases like ["database upload", "upload"] where lengths differ
 		for (Map.Entry<Integer, List<List<String>>> entry : aliasesByLength.entrySet()) {
 			List<List<String>> aliasParts = entry.getValue();
-
-			// Build the command chain by chaining literals
-			// Group aliases by position to create alternatives at each level
 			int numParts = entry.getKey();
+
 			Command.Builder<S> builder = commandManager.commandBuilder(rootCommand);
 
 			for (int i = 0; i < numParts; i++) {
-				final int position = i;
+				final int index = i;
 				List<String> alternatives = aliasParts.stream()
-						.map(parts -> parts.get(position))
+						.map(parts -> parts.get(index))
 						.distinct()
 						.toList();
 
@@ -143,18 +123,20 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 					: ""
 			));
 
-			builder = applyCommandArguments(builder, definition);
+			Map<String, CommandComponent<S>> componentCollector = new LinkedHashMap<>();
+			CommandExecutionHandler<S> commandHandler = handlerFactory.create(componentCollector);
+
+			builder = applyCommandArguments(builder, definition, componentCollector);
 			builder = applyCommandProperties(builder, definition);
-			registerBuiltCommand(builder, handler);
+			registerBuiltCommand(builder, commandHandler);
 		}
 	}
 
 	private void registerRootCommand(
 			@NotNull CommandDefinition definition,
 			@NotNull List<String> aliases,
-			@NotNull Consumer<CommandContext<S>> handler
+			@NotNull HandlerFactory<S> handlerFactory
 	) {
-		// Use first alias as main name, rest as aliases
 		String mainAlias = aliases.get(0);
 		String[] remainingAliases = aliases.size() > 1
 				? aliases.subList(1, aliases.size()).toArray(new String[0])
@@ -163,14 +145,18 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 		Command.Builder<S> builder = commandManager.commandBuilder(mainAlias, remainingAliases)
 				.commandDescription(Description.of(definition.getDescription() != null ? definition.getDescription() : ""));
 
-		builder = applyCommandArguments(builder, definition);
+		Map<String, CommandComponent<S>> componentCollector = new LinkedHashMap<>();
+		CommandExecutionHandler<S> commandHandler = handlerFactory.create(componentCollector);
+
+		builder = applyCommandArguments(builder, definition, componentCollector);
 		builder = applyCommandProperties(builder, definition);
-		registerBuiltCommand(builder, handler);
+		registerBuiltCommand(builder, commandHandler);
 	}
 
 	private Command.Builder<S> applyCommandArguments(
 			@NotNull Command.Builder<S> builder,
-			@NotNull CommandDefinition definition
+			@NotNull CommandDefinition definition,
+			@NotNull Map<String, CommandComponent<S>> componentCollector
 	) {
 		String usage = definition.getUsage();
 		if (usage == null || usage.isBlank()) return builder;
@@ -200,9 +186,13 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 				componentBuilder.suggestionProvider(suggestions);
 
 			if (usageArgument.required())
-				builder = builder.required(componentBuilder);
+				componentBuilder.required();
 			else
-				builder = builder.optional(componentBuilder);
+				componentBuilder.optional();
+
+			CommandComponent<S> component = componentBuilder.build();
+			componentCollector.put(usageArgument.name(), component);
+			builder = builder.argument(component);
 		}
 
 		return builder;
@@ -234,11 +224,9 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 			@NotNull Command.Builder<S> builder,
 			@NotNull CommandDefinition definition
 	) {
-		// Add permission if specified
 		if (definition.getPermission() != null && !definition.getPermission().isEmpty())
 			builder = builder.permission(definition.getPermission());
 
-		// Add cooldown if enabled
 		if (definition.getCooldown() != null && definition.getCooldown().isEnabled()) {
 			Cooldown<S> cooldown = Cooldown.of(
 					DurationFunction.constant(Duration.ofSeconds(definition.getCooldown().getDuration())),
@@ -252,18 +240,12 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 
 	private void registerBuiltCommand(
 			@NotNull Command.Builder<S> builder,
-			@NotNull Consumer<CommandContext<S>> handler
+			@NotNull CommandExecutionHandler<S> handler
 	) {
-		CommandExecutionHandler<S> executionHandler = handler::accept;
-		Command<S> command = builder.handler(executionHandler).build();
+		Command<S> command = builder.handler(handler).build();
 		commandManager.command(command);
 	}
 
-	/**
-	 * Creates a cooldown manager for command cooldowns.
-	 *
-	 * @return The cooldown manager
-	 */
 	private CooldownManager<S> createCooldownManager() {
 		CooldownRepository<S> repository = CooldownRepository.mapping(
 				uuidExtractor,
@@ -279,23 +261,11 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 		return CooldownManager.cooldownManager(configuration);
 	}
 
-	@Override
-	public void setRootCommand(@NotNull String rootCommandName) {
-		this.rootCommand = rootCommandName;
-	}
-
-	@Override
-	@Nullable
-	public String getRootCommand() {
-		return rootCommand;
-	}
-
-	@Override
-	@NotNull
-	public CommandManager<S> getCommandManager() {
-		return commandManager;
-	}
-
 	private record UsageArgument(String name, boolean required, boolean greedy) {}
+
+	@FunctionalInterface
+	public interface HandlerFactory<S> {
+		CommandExecutionHandler<S> create(@NotNull Map<String, CommandComponent<S>> components);
+	}
 }
 

@@ -1,9 +1,14 @@
 package me.whereareiam.commandant;
 
 import me.whereareiam.commandant.common.CommandExceptionHandler;
-import me.whereareiam.commandant.common.DefaultCommandRegistrar;
+import me.whereareiam.commandant.common.registration.CommandDefinitionRegistration;
+import me.whereareiam.commandant.common.registration.type.AnnotationRegistrar;
+import me.whereareiam.commandant.common.registration.type.ProgrammaticRegistrar;
 import me.whereareiam.commandant.model.CommandDefinition;
 import me.whereareiam.commandant.model.message.ExceptionMessages;
+import me.whereareiam.commandant.registration.CommandRegistrar;
+import me.whereareiam.commandant.registration.type.AnnotationCommandRegistrar;
+import me.whereareiam.commandant.registration.type.ProgrammaticCommandRegistrar;
 import me.whereareiam.keystone.Actor;
 import me.whereareiam.keystone.serializer.SerializerEngine;
 import org.incendo.cloud.CommandManager;
@@ -26,7 +31,7 @@ public final class Commandant {
 	 * Creates a new CommandRegistrar instance for Actor types.
 	 * Uses Actor.getUniqueId() automatically for cooldown tracking.
 	 *
-	 * @param commandManager The command manager to register commands with
+	 * @param commandManager The command manager to registration commands with
 	 * @param <S>            The sender type (must extend Actor)
 	 * @return A new CommandRegistrar instance
 	 */
@@ -42,7 +47,46 @@ public final class Commandant {
 			@NotNull CommandManager<S> commandManager,
 			@NotNull Function<String, SuggestionProvider<S>> suggestionResolver
 	) {
-		return DefaultCommandRegistrar.create(commandManager, Actor::getUniqueId, suggestionResolver);
+		return createProgrammaticRegistrar(commandManager, suggestionResolver);
+	}
+
+	/**
+	 * Creates a programmatic command registrar for Actor types.
+	 * This registrar supports registering commands directly from {@link CommandDefinition}s.
+	 *
+	 * @param commandManager     The command manager to registration commands with
+	 * @param suggestionResolver Function to resolve suggestion providers by name
+	 * @param <S>                The sender type (must extend Actor)
+	 * @return A new ProgrammaticCommandRegistrar instance
+	 */
+	@NotNull
+	public static <S extends Actor> ProgrammaticCommandRegistrar<S> createProgrammaticRegistrar(
+			@NotNull CommandManager<S> commandManager,
+			@NotNull Function<String, SuggestionProvider<S>> suggestionResolver
+	) {
+		return ProgrammaticRegistrar.create(commandManager, Actor::getUniqueId, suggestionResolver);
+	}
+
+	/**
+	 * Creates an annotation-based command registrar for Actor types.
+	 * This registrar supports registering commands from Cloud's annotation API.
+	 *
+	 * @param commandManager     The command manager to register commands with
+	 * @param suggestionResolver Function to resolve suggestion providers by name
+	 * @param <S>                The sender type (must extend Actor)
+	 * @return A new AnnotationCommandRegistrar instance
+	 */
+	@NotNull
+	public static <S extends Actor> AnnotationCommandRegistrar<S> createAnnotationRegistrar(
+			@NotNull CommandManager<S> commandManager,
+			@NotNull Function<String, SuggestionProvider<S>> suggestionResolver
+	) {
+		CommandDefinitionRegistration<S> definitionRegistration = new CommandDefinitionRegistration<>(
+				commandManager,
+				Actor::getUniqueId,
+				suggestionResolver
+		);
+		return new AnnotationRegistrar<>(definitionRegistration);
 	}
 
 	/**
@@ -72,7 +116,7 @@ public final class Commandant {
 	 *
 	 * @param exceptionMessages The exception message configuration
 	 * @param serializer        The serializer engine to use for formatting command exception messages
-	 * @param commandManager    The command manager to register handlers with
+	 * @param commandManager    The command manager to registration handlers with
 	 * @param audienceProvider  Provider to convert the sender to an Audience
 	 * @param <S>               The sender type (must extend Actor)
 	 */
