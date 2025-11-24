@@ -143,8 +143,8 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 					: ""
 			));
 
-			applyCommandArguments(builder, definition);
-			applyCommandProperties(builder, definition);
+			builder = applyCommandArguments(builder, definition);
+			builder = applyCommandProperties(builder, definition);
 			registerBuiltCommand(builder, handler);
 		}
 	}
@@ -163,24 +163,24 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 		Command.Builder<S> builder = commandManager.commandBuilder(mainAlias, remainingAliases)
 				.commandDescription(Description.of(definition.getDescription() != null ? definition.getDescription() : ""));
 
-		applyCommandArguments(builder, definition);
-		applyCommandProperties(builder, definition);
+		builder = applyCommandArguments(builder, definition);
+		builder = applyCommandProperties(builder, definition);
 		registerBuiltCommand(builder, handler);
 	}
 
-	private void applyCommandArguments(
+	private Command.Builder<S> applyCommandArguments(
 			@NotNull Command.Builder<S> builder,
 			@NotNull CommandDefinition definition
 	) {
 		String usage = definition.getUsage();
-		if (usage == null || usage.isBlank()) return;
+		if (usage == null || usage.isBlank()) return builder;
 
 		List<UsageArgument> usageArguments = parseUsageArguments(usage);
-		if (usageArguments.isEmpty()) return;
+		if (usageArguments.isEmpty()) return builder;
 
 		Map<String, String> descriptions = definition.getArguments();
-		if (descriptions == null) {
-			descriptions = new HashMap<>();
+		if (!(descriptions instanceof HashMap)) {
+			descriptions = new HashMap<>(descriptions);
 			definition.setArguments(descriptions);
 		}
 
@@ -191,7 +191,7 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 					? CommandComponent.builder(usageArgument.name(), StringParser.greedyStringParser())
 					: CommandComponent.builder(usageArgument.name(), StringParser.stringParser());
 
-			String description = descriptions != null ? descriptions.get(usageArgument.name()) : null;
+			String description = descriptions.get(usageArgument.name());
 			if (description != null && !description.isBlank())
 				componentBuilder.description(Description.of(description));
 
@@ -200,10 +200,12 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 				componentBuilder.suggestionProvider(suggestions);
 
 			if (usageArgument.required())
-				builder.required(componentBuilder);
+				builder = builder.required(componentBuilder);
 			else
-				builder.optional(componentBuilder);
+				builder = builder.optional(componentBuilder);
 		}
+
+		return builder;
 	}
 
 	private List<UsageArgument> parseUsageArguments(@NotNull String usage) {
@@ -228,13 +230,13 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 		return arguments;
 	}
 
-	private void applyCommandProperties(
+	private Command.Builder<S> applyCommandProperties(
 			@NotNull Command.Builder<S> builder,
 			@NotNull CommandDefinition definition
 	) {
 		// Add permission if specified
 		if (definition.getPermission() != null && !definition.getPermission().isEmpty())
-			builder.permission(definition.getPermission());
+			builder = builder.permission(definition.getPermission());
 
 		// Add cooldown if enabled
 		if (definition.getCooldown() != null && definition.getCooldown().isEnabled()) {
@@ -242,8 +244,10 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 					DurationFunction.constant(Duration.ofSeconds(definition.getCooldown().getDuration())),
 					CooldownGroup.named(definition.getCooldown().getGroup())
 			);
-			builder.apply(cooldown);
+			builder = builder.apply(cooldown);
 		}
+
+		return builder;
 	}
 
 	private void registerBuiltCommand(

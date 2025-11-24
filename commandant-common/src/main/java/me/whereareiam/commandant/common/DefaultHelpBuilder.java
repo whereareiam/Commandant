@@ -158,9 +158,15 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 	 */
 	@NotNull
 	private String formatSingleArgument(@NotNull CommandComponent<?> argument, @NotNull HelpMessages.Format format) {
-		String argumentName = customArgumentNames.getOrDefault(argument.name(), argument.name());
+		CommandComponent.ComponentType type = argument.type();
+		boolean variable = type == CommandComponent.ComponentType.REQUIRED_VARIABLE
+				|| type == CommandComponent.ComponentType.OPTIONAL_VARIABLE;
 
-		return switch (argument.type()) {
+		String argumentName = variable
+				? customArgumentNames.getOrDefault(argument.name(), argument.name())
+				: argument.name();
+
+		return switch (type) {
 			case REQUIRED_VARIABLE -> format.getArgument().replace("{argument}", argumentName);
 			case OPTIONAL_VARIABLE -> format.getOptionalArgument().replace("{argument}", argumentName);
 			default -> argumentName;

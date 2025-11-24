@@ -13,6 +13,10 @@ cloud-minecraft-extras = "2.0.0-beta.13"
 # adventure
 adventure = "4.17.0"
 
+# testing
+junit = "6.0.0"
+mockito = "5.20.0"
+
 [libraries]
 
 # general
@@ -27,3 +31,9 @@ cloud-minecraft-extras = { group = "org.incendo", name = "cloud-minecraft-extras
 
 # adventure
 adventure-api = { group = "net.kyori", name = "adventure-api", version.ref = "adventure" }
+
+# testing
+junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version.ref = "junit" }
+junit-platform = { group = "org.junit.platform", name = "junit-platform-launcher" }
+mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockito" }
+mockito-junit = { group = "org.mockito", name = "mockito-junit-jupiter", version.ref = "mockito" }
