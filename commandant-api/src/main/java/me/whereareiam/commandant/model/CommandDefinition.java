@@ -2,7 +2,9 @@ package me.whereareiam.commandant.model;
 
 import lombok.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Model representing a command definition.
@@ -24,6 +26,9 @@ public class CommandDefinition {
 	private String usage;
 
 	private Cooldown cooldown;
+
+	@Builder.Default
+	private Map<String, String> arguments = new HashMap<>();
 
 	@Getter
 	@ToString

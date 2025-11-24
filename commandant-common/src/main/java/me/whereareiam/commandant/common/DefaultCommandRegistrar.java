@@ -4,19 +4,18 @@ import me.whereareiam.commandant.CommandRegistrar;
 import me.whereareiam.commandant.model.CommandDefinition;
 import org.incendo.cloud.Command;
 import org.incendo.cloud.CommandManager;
+import org.incendo.cloud.component.CommandComponent;
 import org.incendo.cloud.context.CommandContext;
 import org.incendo.cloud.description.Description;
 import org.incendo.cloud.execution.CommandExecutionHandler;
+import org.incendo.cloud.parser.standard.StringParser;
 import org.incendo.cloud.processors.cooldown.*;
 import org.incendo.cloud.processors.cooldown.listener.ScheduledCleanupCreationListener;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
@@ -98,24 +97,24 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 		Map<Integer, List<List<String>>> aliasesByLength = aliases.stream()
 				.map(alias -> List.of(alias.split("\\s+")))
 				.collect(Collectors.groupingBy(List::size));
-		
+
 		// Register each group of aliases (with the same number of parts) separately
 		// This handles cases like ["database upload", "upload"] where lengths differ
 		for (Map.Entry<Integer, List<List<String>>> entry : aliasesByLength.entrySet()) {
 			List<List<String>> aliasParts = entry.getValue();
-			
+
 			// Build the command chain by chaining literals
 			// Group aliases by position to create alternatives at each level
 			int numParts = entry.getKey();
 			Command.Builder<S> builder = commandManager.commandBuilder(rootCommand);
-			
+
 			for (int i = 0; i < numParts; i++) {
 				final int position = i;
 				List<String> alternatives = aliasParts.stream()
 						.map(parts -> parts.get(position))
 						.distinct()
 						.toList();
-				
+
 				if (!alternatives.isEmpty()) {
 					String mainLiteral = alternatives.get(0);
 					String[] remainingLiterals = alternatives.size() > 1
@@ -124,12 +123,13 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 					builder = builder.literal(mainLiteral, remainingLiterals);
 				}
 			}
-			
+
 			builder = builder.commandDescription(Description.of(definition.getDescription() != null
 					? definition.getDescription()
 					: ""
 			));
 
+			applyCommandArguments(builder, definition);
 			applyCommandProperties(builder, definition);
 			registerBuiltCommand(builder, handler);
 		}
@@ -149,8 +149,59 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 		Command.Builder<S> builder = commandManager.commandBuilder(mainAlias, remainingAliases)
 				.commandDescription(Description.of(definition.getDescription() != null ? definition.getDescription() : ""));
 
+		applyCommandArguments(builder, definition);
 		applyCommandProperties(builder, definition);
 		registerBuiltCommand(builder, handler);
+	}
+
+	private void applyCommandArguments(
+			@NotNull Command.Builder<S> builder,
+			@NotNull CommandDefinition definition
+	) {
+		String usage = definition.getUsage();
+		if (usage == null || usage.isBlank()) return;
+
+		List<UsageArgument> usageArguments = parseUsageArguments(usage);
+		if (usageArguments.isEmpty()) return;
+
+		Map<String, String> descriptions = definition.getArguments();
+
+		for (UsageArgument usageArgument : usageArguments) {
+			CommandComponent.Builder<S, ?> componentBuilder = usageArgument.greedy()
+					? CommandComponent.builder(usageArgument.name(), StringParser.greedyStringParser())
+					: CommandComponent.builder(usageArgument.name(), StringParser.stringParser());
+
+			String description = descriptions != null ? descriptions.get(usageArgument.name()) : null;
+			if (description != null && !description.isBlank())
+				componentBuilder.description(Description.of(description));
+
+			if (usageArgument.required())
+				builder.required(componentBuilder);
+			else
+				builder.optional(componentBuilder);
+		}
+	}
+
+	private List<UsageArgument> parseUsageArguments(@NotNull String usage) {
+		String[] tokens = usage.split("\\s+");
+		List<UsageArgument> arguments = new ArrayList<>();
+
+		for (String token : tokens) {
+			if (token.isBlank()) continue;
+
+			boolean required = token.startsWith("<") && token.endsWith(">");
+			boolean optional = token.startsWith("[") && token.endsWith("]");
+			if (!required && !optional) continue;
+
+			String name = token.substring(1, token.length() - 1);
+			boolean greedy = name.endsWith("...");
+			if (greedy) name = name.substring(0, name.length() - 3);
+			if (name.isEmpty()) continue;
+
+			arguments.add(new UsageArgument(name, required, greedy));
+		}
+
+		return arguments;
 	}
 
 	private void applyCommandProperties(
@@ -216,5 +267,7 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 	public CommandManager<S> getCommandManager() {
 		return commandManager;
 	}
+
+	private record UsageArgument(String name, boolean required, boolean greedy) {}
 }
 
