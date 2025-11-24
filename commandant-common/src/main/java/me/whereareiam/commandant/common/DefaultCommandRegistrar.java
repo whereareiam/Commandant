@@ -11,6 +11,7 @@ import org.incendo.cloud.execution.CommandExecutionHandler;
 import org.incendo.cloud.parser.standard.StringParser;
 import org.incendo.cloud.processors.cooldown.*;
 import org.incendo.cloud.processors.cooldown.listener.ScheduledCleanupCreationListener;
+import org.incendo.cloud.suggestion.SuggestionProvider;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
 public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 	private final CommandManager<S> commandManager;
 	private final Function<S, UUID> uuidExtractor;
+	private final Function<String, SuggestionProvider<S>> suggestionResolver;
 	private String rootCommand;
 
 	/**
@@ -40,10 +42,13 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 	 */
 	private DefaultCommandRegistrar(
 			@NotNull CommandManager<S> commandManager,
-			@NotNull Function<S, UUID> uuidExtractor
+			@NotNull Function<S, UUID> uuidExtractor,
+			@NotNull Function<String, SuggestionProvider<S>> suggestionResolver
 	) {
 		this.commandManager = commandManager;
 		this.uuidExtractor = uuidExtractor;
+		this.suggestionResolver = suggestionResolver;
+
 		CooldownManager<S> cooldownManager = createCooldownManager();
 		commandManager.registerCommandPostProcessor(cooldownManager.createPostprocessor());
 	}
@@ -61,7 +66,16 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 			@NotNull CommandManager<S> commandManager,
 			@NotNull Function<S, UUID> uuidExtractor
 	) {
-		return new DefaultCommandRegistrar<>(commandManager, uuidExtractor);
+		return create(commandManager, uuidExtractor, name -> null);
+	}
+
+	@NotNull
+	public static <S> CommandRegistrar<S> create(
+			@NotNull CommandManager<S> commandManager,
+			@NotNull Function<S, UUID> uuidExtractor,
+			@NotNull Function<String, SuggestionProvider<S>> suggestionResolver
+	) {
+		return new DefaultCommandRegistrar<>(commandManager, uuidExtractor, suggestionResolver);
 	}
 
 	@Override
@@ -165,8 +179,14 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 		if (usageArguments.isEmpty()) return;
 
 		Map<String, String> descriptions = definition.getArguments();
+		if (descriptions == null) {
+			descriptions = new HashMap<>();
+			definition.setArguments(descriptions);
+		}
 
 		for (UsageArgument usageArgument : usageArguments) {
+			descriptions.putIfAbsent(usageArgument.name(), usageArgument.name());
+
 			CommandComponent.Builder<S, ?> componentBuilder = usageArgument.greedy()
 					? CommandComponent.builder(usageArgument.name(), StringParser.greedyStringParser())
 					: CommandComponent.builder(usageArgument.name(), StringParser.stringParser());
@@ -174,6 +194,10 @@ public class DefaultCommandRegistrar<S> implements CommandRegistrar<S> {
 			String description = descriptions != null ? descriptions.get(usageArgument.name()) : null;
 			if (description != null && !description.isBlank())
 				componentBuilder.description(Description.of(description));
+
+			SuggestionProvider<S> suggestions = suggestionResolver.apply(usageArgument.name());
+			if (suggestions != null)
+				componentBuilder.suggestionProvider(suggestions);
 
 			if (usageArgument.required())
 				builder.required(componentBuilder);

@@ -8,6 +8,7 @@ import me.whereareiam.keystone.Actor;
 import me.whereareiam.keystone.serializer.SerializerEngine;
 import org.incendo.cloud.CommandManager;
 import org.incendo.cloud.minecraft.extras.AudienceProvider;
+import org.incendo.cloud.suggestion.SuggestionProvider;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -33,7 +34,15 @@ public final class Commandant {
 	public static <S extends Actor> CommandRegistrar<S> createRegistrar(
 			@NotNull CommandManager<S> commandManager
 	) {
-		return DefaultCommandRegistrar.create(commandManager, Actor::getUniqueId);
+		return createRegistrar(commandManager, name -> null);
+	}
+
+	@NotNull
+	public static <S extends Actor> CommandRegistrar<S> createRegistrar(
+			@NotNull CommandManager<S> commandManager,
+			@NotNull Function<String, SuggestionProvider<S>> suggestionResolver
+	) {
+		return DefaultCommandRegistrar.create(commandManager, Actor::getUniqueId, suggestionResolver);
 	}
 
 	/**

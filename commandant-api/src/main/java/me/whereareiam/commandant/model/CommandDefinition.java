@@ -11,6 +11,7 @@ import java.util.Map;
  * Contains all the properties needed to register a command.
  */
 @Getter
+@Setter
 @ToString
 @NoArgsConstructor
 @AllArgsConstructor
