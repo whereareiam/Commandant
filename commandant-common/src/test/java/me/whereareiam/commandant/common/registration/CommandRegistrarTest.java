@@ -8,10 +8,14 @@ import org.incendo.cloud.CommandManager;
 import org.incendo.cloud.annotations.Argument;
 import org.incendo.cloud.annotations.Default;
 import org.incendo.cloud.component.CommandComponent;
+import org.incendo.cloud.description.Description;
 import org.incendo.cloud.execution.ExecutionCoordinator;
 import org.incendo.cloud.internal.CommandRegistrationHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.*;
 
@@ -35,70 +39,102 @@ class AnnotationCommandRegistrarTest {
 		};
 
 		this.definitions = new HashMap<>();
-		this.definitions.put("help", CommandDefinition.builder()
-				.aliases(List.of("help"))
-				.permission("intercept.help")
-				.description("Displays help information")
-				.usage("{command} help [page]")
-				.build());
+		this.definitions.put("help", def(true, "{command} help [page]", "intercept.help", "Displays help information", "help"));
 
-		CommandDefinitionRegistration<TestCommandSender> registration = new CommandDefinitionRegistration<>(
-				commandManager
-		);
-		registration.setRootCommand("intercept");
+		this.registrar = newRegistrar("intercept");
+	}
 
-		this.registrar = new AnnotationCommandRegistrar<>(
+	/* ---------------- Helpers ---------------- */
+
+	private CommandRegistrar<TestCommandSender> newRegistrar(String root) {
+		CommandDefinitionRegistration<TestCommandSender> registration = new CommandDefinitionRegistration<>(commandManager);
+		if (root != null) registration.setRootCommand(root);
+
+		return new AnnotationCommandRegistrar<>(
 				registration,
 				TestCommandSender.class,
 				definitions::get
 		);
 	}
+
+	private static CommandDefinition def(
+			boolean enabled,
+			String usage,
+			String permission,
+			String description,
+			String... aliases
+	) {
+		return CommandDefinition.builder()
+				.enabled(enabled)
+				.usage(usage)
+				.permission(permission)
+				.description(description)
+				.aliases(aliases == null ? null : List.of(aliases))
+				.build();
+	}
+
+	private Command<TestCommandSender> onlyCommand() {
+		Collection<Command<TestCommandSender>> cmds = commandManager.commands();
+		assertEquals(1, cmds.size(), "Expected exactly 1 command, got: " + cmds.size());
+		return cmds.iterator().next();
+	}
+
+	private List<String> literalNames(Command<TestCommandSender> command) {
+		List<String> names = new ArrayList<>();
+		for (CommandComponent<TestCommandSender> c : command.components()) {
+			if (c.type() != CommandComponent.ComponentType.LITERAL) continue;
+			names.add(c.name());
+		}
+		return names;
+	}
+
+	private CommandComponent<TestCommandSender> nthLiteral(Command<TestCommandSender> command, int index) {
+		int i = -1;
+		for (CommandComponent<TestCommandSender> c : command.components()) {
+			if (c.type() != CommandComponent.ComponentType.LITERAL) continue;
+			if (++i == index) return c;
+		}
+		fail("No literal at index " + index + " in " + literalNames(command));
+		return null; // unreachable
+	}
+
+	private static boolean hasComponent(Command<TestCommandSender> command, String name) {
+		for (CommandComponent<TestCommandSender> c : command.components()) {
+			if (Objects.equals(c.name(), name)) return true;
+		}
+		return false;
+	}
+
+	/* ---------------- Tests ---------------- */
 
 	@Test
 	void registersAnnotatedCommandUsingDefinitions() {
 		registrar.register(new HelpCommands());
 
-		Command<TestCommandSender> command = commandManager.commands().iterator().next();
-
+		Command<TestCommandSender> command = onlyCommand();
 		assertEquals("intercept.help", command.commandPermission().permissionString());
 		assertEquals("Displays help information", command.commandDescription().description().textDescription());
-		List<String> literals = command.components().stream()
-				.map(CommandComponent::name)
-				.toList();
-		assertEquals(List.of("intercept", "help"), literals.subList(0, 2));
+
+		assertEquals(List.of("intercept", "help"), literalNames(command));
 		assertEquals(definitions.get("help"), registrar.resolveDefinition(command).orElse(null));
 	}
 
 	@Test
 	void registersStandaloneCommandWithoutRoot() {
-		CommandDefinitionRegistration<TestCommandSender> registration = new CommandDefinitionRegistration<>(
-				commandManager
-		);
-		// No root command set
-		CommandRegistrar<TestCommandSender> standaloneRegistrar = new AnnotationCommandRegistrar<>(
-				registration,
-				TestCommandSender.class,
-				definitions::get
-		);
+		// root intentionally not set
+		CommandRegistrar<TestCommandSender> standalone = newRegistrar(null);
 
-		definitions.put("locale", CommandDefinition.builder()
-				.aliases(List.of("locale"))
-				.permission("intercept.locale")
-				.description("Change locale")
-				.usage("locale <locale>")  // No {command} placeholder
-				.build());
+		definitions.put("locale", def(true, "locale <locale>", "intercept.locale", "Change locale", "locale"));
+		standalone.register(new LocaleCommands());
 
-		standaloneRegistrar.register(new LocaleCommands());
-
-		Command<TestCommandSender> command = commandManager.commands().iterator().next();
-		assertEquals("locale", command.components().get(0).name());
+		Command<TestCommandSender> command = onlyCommand();
+		assertEquals(List.of("locale"), literalNames(command));
 		assertEquals("intercept.locale", command.commandPermission().permissionString());
 	}
 
 	@Test
 	void skipsCommandsWithoutDefinitionAnnotation() {
 		registrar.register(new CommandsWithoutDefinition());
-
 		assertTrue(commandManager.commands().isEmpty());
 	}
 
@@ -106,164 +142,115 @@ class AnnotationCommandRegistrarTest {
 	void skipsCommandsWithNullDefinition() {
 		definitions.put("nonexistent", null);
 		registrar.register(new CommandsWithNonexistentDefinition());
-
 		assertTrue(commandManager.commands().isEmpty());
 	}
 
 	@Test
 	void skipsDisabledCommands() {
-		definitions.put("disabled", CommandDefinition.builder()
-				.enabled(false)
-				.aliases(List.of("disabled"))
-				.usage("{command} disabled")
-				.build());
-
+		definitions.put("disabled", def(false, "{command} disabled", null, null, "disabled"));
 		registrar.register(new DisabledCommands());
-
 		assertTrue(commandManager.commands().isEmpty());
 	}
 
 	@Test
-	void appliesCommandMetadata() {
-		definitions.put("reload", CommandDefinition.builder()
-				.aliases(List.of("reload"))
-				.permission("intercept.reload")
-				.description("Reload configuration")
-				.usage("{command} reload")
-				.build());
-
+	void appliesCommandMetadata_whenNotBlank() {
+		definitions.put("reload", def(true, "{command} reload", "intercept.reload", "Reload configuration", "reload"));
 		registrar.register(new ReloadCommands());
 
-		Command<TestCommandSender> command = commandManager.commands().iterator().next();
+		Command<TestCommandSender> command = onlyCommand();
 		assertEquals("intercept.reload", command.commandPermission().permissionString());
 		assertEquals("Reload configuration", command.commandDescription().description().textDescription());
 	}
 
 	@Test
-	void handlesCommandsWithRequiredArguments() {
-		definitions.put("set", CommandDefinition.builder()
-				.aliases(List.of("set"))
-				.permission("intercept.set")
-				.description("Set value")
-				.usage("{command} set <key> <value>")
-				.build());
-
+	void handlesRequiredArguments() {
+		definitions.put("set", def(true, "{command} set <key> <value>", "intercept.set", "Set value", "set"));
 		registrar.register(new SetCommands());
 
-		Command<TestCommandSender> command = commandManager.commands().iterator().next();
-		List<String> componentNames = command.components().stream()
-				.map(CommandComponent::name)
-				.toList();
-		assertTrue(componentNames.contains("key"));
-		assertTrue(componentNames.contains("value"));
+		Command<TestCommandSender> command = onlyCommand();
+		assertTrue(hasComponent(command, "key"));
+		assertTrue(hasComponent(command, "value"));
 	}
 
 	@Test
-	void handlesCommandsWithOptionalArguments() {
-		definitions.put("optional", CommandDefinition.builder()
-				.aliases(List.of("optional"))
-				.permission("intercept.optional")
-				.description("Optional command")
-				.usage("{command} optional [arg]")
-				.build());
-
+	void handlesOptionalArguments() {
+		definitions.put("optional", def(true, "{command} optional [arg]", "intercept.optional", "Optional command", "optional"));
 		registrar.register(new OptionalCommands());
 
-		Command<TestCommandSender> command = commandManager.commands().iterator().next();
-		Optional<CommandComponent<TestCommandSender>> optionalArg = command.components().stream()
-				.filter(c -> c.name().equals("arg"))
-				.findFirst();
-		assertTrue(optionalArg.isPresent());
-		assertFalse(optionalArg.get().required());
+		Command<TestCommandSender> command = onlyCommand();
+
+		CommandComponent<TestCommandSender> arg = command.components().stream()
+				.filter(c -> Objects.equals(c.name(), "arg"))
+				.findFirst()
+				.orElseThrow();
+
+		assertFalse(arg.required());
 	}
 
 	@Test
-	void handlesCommandsWithDefaultValues() {
-		definitions.put("default", CommandDefinition.builder()
-				.aliases(List.of("default"))
-				.permission("intercept.default")
-				.description("Default command")
-				.usage("{command} default [value]")
-				.build());
-
+	void handlesDefaultValues() {
+		definitions.put("default", def(true, "{command} default [value]", "intercept.default", "Default command", "default"));
 		registrar.register(new DefaultCommands());
 
-		Command<TestCommandSender> command = commandManager.commands().iterator().next();
-		Optional<CommandComponent<TestCommandSender>> defaultArg = command.components().stream()
-				.filter(c -> c.name().equals("value"))
-				.findFirst();
-		assertTrue(defaultArg.isPresent());
-		assertTrue(defaultArg.get().hasDefaultValue());
+		Command<TestCommandSender> command = onlyCommand();
+
+		CommandComponent<TestCommandSender> value = command.components().stream()
+				.filter(c -> Objects.equals(c.name(), "value"))
+				.findFirst()
+				.orElseThrow();
+
+		assertTrue(value.hasDefaultValue());
 	}
 
 	@Test
 	void registersMultipleCommands() {
-		definitions.put("cmd1", CommandDefinition.builder()
-				.aliases(List.of("cmd1"))
-				.permission("intercept.cmd1")
-				.usage("{command} cmd1")
-				.build());
-		definitions.put("cmd2", CommandDefinition.builder()
-				.aliases(List.of("cmd2"))
-				.permission("intercept.cmd2")
-				.usage("{command} cmd2")
-				.build());
+		definitions.put("cmd1", def(true, "{command} cmd1", "intercept.cmd1", null, "cmd1"));
+		definitions.put("cmd2", def(true, "{command} cmd2", "intercept.cmd2", null, "cmd2"));
 
 		registrar.register(new MultipleCommands());
 
-		Collection<Command<TestCommandSender>> commands = commandManager.commands();
-		assertEquals(2, commands.size());
+		assertEquals(2, commandManager.commands().size());
 	}
 
-	@Test
-	void handlesEmptyPermissionString() {
+	@ParameterizedTest
+	@NullAndEmptySource
+	@ValueSource(strings = {"   "})
+	void blankOrNullPermission_isNotApplied(String permission) {
 		definitions.put("noperm", CommandDefinition.builder()
 				.aliases(List.of("noperm"))
-				.permission("")
+				.permission(permission)
 				.description("No permission")
 				.usage("{command} noperm")
 				.build());
 
 		registrar.register(new NoPermissionCommands());
 
-		Command<TestCommandSender> command = commandManager.commands().iterator().next();
+		Command<TestCommandSender> command = onlyCommand();
 		assertTrue(command.commandPermission().permissionString().isEmpty());
 	}
 
-	@Test
-	void handlesNullDescription() {
+	@ParameterizedTest
+	@NullAndEmptySource
+	@ValueSource(strings = {"   "})
+	void blankOrNullDescription_isNotApplied(String description) {
 		definitions.put("nodesc", CommandDefinition.builder()
 				.aliases(List.of("nodesc"))
 				.permission("intercept.nodesc")
-				.description(null)
+				.description(description)
 				.usage("{command} nodesc")
 				.build());
 
 		registrar.register(new NoDescriptionCommands());
 
-		Command<TestCommandSender> command = commandManager.commands().iterator().next();
-		assertNotNull(command.commandDescription());
-	}
-
-	@Test
-	void handlesBlankDescription() {
-		definitions.put("blankdesc", CommandDefinition.builder()
-				.aliases(List.of("blankdesc"))
-				.permission("intercept.blankdesc")
-				.description("   ")
-				.usage("{command} blankdesc")
-				.build());
-
-		registrar.register(new BlankDescriptionCommands());
-
-		Command<TestCommandSender> command = commandManager.commands().iterator().next();
-		assertNotNull(command.commandDescription());
+		Command<TestCommandSender> command = onlyCommand();
+		// Description object exists, but should be the default/empty one if you didn't apply metadata:
+		assertTrue(command.commandDescription().description().equals(Description.empty())
+						|| command.commandDescription().description().textDescription().isEmpty(),
+				"Expected empty/default description when not applied");
 	}
 
 	@Test
 	void usesDefinitionAliasesInsteadOfCommandAnnotation() {
-		// Definition has multiple aliases: locale, language, lang
-		// But @Command annotation only has "locale"
 		definitions.put("locale-multi", CommandDefinition.builder()
 				.aliases(List.of("locale", "language", "lang"))
 				.permission("intercept.locale")
@@ -273,47 +260,37 @@ class AnnotationCommandRegistrarTest {
 
 		registrar.register(new MultiAliasCommands());
 
-		// Should register 3 commands (one for each alias)
-		Collection<Command<TestCommandSender>> commands = commandManager.commands();
-		assertEquals(3, commands.size());
+		Command<TestCommandSender> command = onlyCommand();
+		CommandComponent<TestCommandSender> aliasLiteral = nthLiteral(command, 1); // intercept + alias
+		Set<String> allAliases = new HashSet<>();
+		allAliases.add(aliasLiteral.name());
+		allAliases.addAll(aliasLiteral.alternativeAliases());
 
-		// Verify all aliases are registered
-		List<String> registeredAliases = commands.stream()
-				.map(cmd -> cmd.components().get(1).name()) // Second component is the alias
-				.toList();
-		assertTrue(registeredAliases.contains("locale"));
-		assertTrue(registeredAliases.contains("language"));
-		assertTrue(registeredAliases.contains("lang"));
+		assertEquals(Set.of("locale", "language", "lang"), allAliases);
 	}
 
 	@Test
-	void usesDefinitionUsageForArgumentOrder() {
-		// Definition usage has <player> <locale> order
-		// @Command annotation might have different order, but definition should take precedence
+	void usesDefinitionUsageForArgumentOrder_evenIfAnnotationDiffers() {
 		definitions.put("locale-target", CommandDefinition.builder()
 				.aliases(List.of("locale"))
 				.permission("intercept.locale.target")
 				.description("Change player locale")
-				.usage("{command} {alias} <player> <locale>")
+				.usage("{command} {alias} <player> <locale>") // definition order: player -> locale
 				.build());
 
 		registrar.register(new LocaleTargetCommands());
 
-		Command<TestCommandSender> command = commandManager.commands().iterator().next();
-		List<String> componentNames = command.components().stream()
-				.skip(2) // Skip "intercept" and "locale" literals
+		Command<TestCommandSender> command = onlyCommand();
+		List<String> namesAfterLiterals = command.components().stream()
+				.filter(c -> c.type() != CommandComponent.ComponentType.LITERAL)
 				.map(CommandComponent::name)
 				.toList();
-		
-		// Arguments should be in definition order: player, locale
-		assertEquals("player", componentNames.get(0));
-		assertEquals("locale", componentNames.get(1));
+
+		assertEquals(List.of("player", "locale"), namesAfterLiterals);
 	}
 
 	@Test
-	void ignoresCommandAnnotationContent() {
-		// @Command annotation has "lang123" but definition has ["lang1", "lang2"]
-		// Only lang1 and lang2 should be registered, lang123 should be ignored
+	void ignoresCommandAnnotationContent_forAliases() {
 		definitions.put("lang-test", CommandDefinition.builder()
 				.aliases(List.of("lang1", "lang2"))
 				.permission("intercept.lang")
@@ -323,17 +300,62 @@ class AnnotationCommandRegistrarTest {
 
 		registrar.register(new IgnoredAnnotationCommands());
 
-		Collection<Command<TestCommandSender>> commands = commandManager.commands();
-		assertEquals(2, commands.size());
+		Command<TestCommandSender> command = onlyCommand();
+		CommandComponent<TestCommandSender> aliasLiteral = nthLiteral(command, 1);
 
-		// Verify only lang1 and lang2 are registered, not lang123 from annotation
-		List<String> registeredAliases = commands.stream()
-				.map(cmd -> cmd.components().get(1).name()) // Second component is the alias
-				.toList();
-		assertTrue(registeredAliases.contains("lang1"));
-		assertTrue(registeredAliases.contains("lang2"));
-		assertFalse(registeredAliases.contains("lang123"));
+		Set<String> allAliases = new HashSet<>();
+		allAliases.add(aliasLiteral.name());
+		allAliases.addAll(aliasLiteral.alternativeAliases());
+
+		assertEquals(Set.of("lang1", "lang2"), allAliases);
+		assertFalse(allAliases.contains("lang123"));
 	}
+
+	@Test
+	void registersMultiWordAliasSubcommand() {
+		definitions.put("mw", CommandDefinition.builder()
+				.aliases(List.of("user add"))
+				.permission("intercept.user.add")
+				.description("Add user")
+				.usage("{command} {alias} <name>")
+				.build());
+
+		registrar.register(new MultiWordAliasCommands());
+
+		Command<TestCommandSender> cmd = onlyCommand();
+		assertEquals(List.of("intercept", "user", "add"), literalNames(cmd));
+		assertTrue(hasComponent(cmd, "name"));
+	}
+
+	@Test
+	void registersMultiWordAliasStandalone() {
+		CommandRegistrar<TestCommandSender> standalone = newRegistrar(null);
+
+		definitions.put("mw-standalone", CommandDefinition.builder()
+				.aliases(List.of("user add"))
+				.permission("intercept.user.add")
+				.description("Add user")
+				.usage("{alias} <name>") // no {command}
+				.build());
+
+		standalone.register(new MultiWordAliasStandaloneCommands());
+
+		Command<TestCommandSender> cmd = onlyCommand();
+		assertEquals(List.of("user", "add"), literalNames(cmd));
+		assertTrue(hasComponent(cmd, "name"));
+	}
+
+	@Test
+	void emptyAliases_throws() {
+		definitions.put("no-alias", CommandDefinition.builder()
+				.aliases(Collections.emptyList())
+				.usage("{command} test")
+				.build());
+
+		assertThrows(IllegalArgumentException.class, () -> registrar.register(new NoAliasCommands()));
+	}
+
+	/* ---------------- Containers ---------------- */
 
 	private static final class HelpCommands {
 		@Definition("help")
@@ -346,142 +368,122 @@ class AnnotationCommandRegistrarTest {
 	private static final class LocaleCommands {
 		@Definition("locale")
 		@org.incendo.cloud.annotations.Command("locale <locale>")
-		public void locale(TestCommandSender sender, @Argument("locale") String locale) {
-			// Test implementation
-		}
+		public void locale(TestCommandSender sender, @Argument("locale") String locale) {}
 	}
 
 	private static final class CommandsWithoutDefinition {
 		@org.incendo.cloud.annotations.Command("test")
-		public void test(TestCommandSender sender) {
-			// No @Definition annotation
-		}
+		public void test(TestCommandSender sender) {}
 	}
 
 	private static final class CommandsWithNonexistentDefinition {
 		@Definition("nonexistent")
 		@org.incendo.cloud.annotations.Command("test")
-		public void test(TestCommandSender sender) {
-			// Definition will be null
-		}
+		public void test(TestCommandSender sender) {}
 	}
 
 	private static final class DisabledCommands {
 		@Definition("disabled")
 		@org.incendo.cloud.annotations.Command("disabled")
-		public void disabled(TestCommandSender sender) {
-			// Command is disabled
-		}
+		public void disabled(TestCommandSender sender) {}
 	}
 
 	private static final class ReloadCommands {
 		@Definition("reload")
 		@org.incendo.cloud.annotations.Command("reload")
-		public void reload(TestCommandSender sender) {
-			// Test implementation
-		}
+		public void reload(TestCommandSender sender) {}
 	}
 
 	private static final class SetCommands {
 		@Definition("set")
 		@org.incendo.cloud.annotations.Command("set <key> <value>")
-		public void set(TestCommandSender sender, @Argument("key") String key, @Argument("value") String value) {
-			// Test implementation
-		}
+		public void set(TestCommandSender sender, @Argument("key") String key, @Argument("value") String value) {}
 	}
 
 	private static final class OptionalCommands {
 		@Definition("optional")
 		@org.incendo.cloud.annotations.Command("optional [arg]")
-		public void optional(TestCommandSender sender, @Argument("arg") @Default("default") String arg) {
-			// Test implementation
-		}
+		public void optional(TestCommandSender sender, @Argument("arg") @Default("default") String arg) {}
 	}
 
 	private static final class DefaultCommands {
 		@Definition("default")
 		@org.incendo.cloud.annotations.Command("default [value]")
-		public void defaultValue(TestCommandSender sender, @Argument("value") @Default("42") int value) {
-			// Test implementation
-		}
+		public void defaultValue(TestCommandSender sender, @Argument("value") @Default("42") int value) {}
 	}
 
 	private static final class MultipleCommands {
 		@Definition("cmd1")
 		@org.incendo.cloud.annotations.Command("cmd1")
-		public void cmd1(TestCommandSender sender) {
-			// Test implementation
-		}
+		public void cmd1(TestCommandSender sender) {}
 
 		@Definition("cmd2")
 		@org.incendo.cloud.annotations.Command("cmd2")
-		public void cmd2(TestCommandSender sender) {
-			// Test implementation
-		}
+		public void cmd2(TestCommandSender sender) {}
 	}
 
 	private static final class NoPermissionCommands {
 		@Definition("noperm")
 		@org.incendo.cloud.annotations.Command("noperm")
-		public void noPermission(TestCommandSender sender) {
-			// Test implementation
-		}
+		public void noPermission(TestCommandSender sender) {}
 	}
 
 	private static final class NoDescriptionCommands {
 		@Definition("nodesc")
 		@org.incendo.cloud.annotations.Command("nodesc")
-		public void noDescription(TestCommandSender sender) {
-			// Test implementation
-		}
-	}
-
-	private static final class BlankDescriptionCommands {
-		@Definition("blankdesc")
-		@org.incendo.cloud.annotations.Command("blankdesc")
-		public void blankDescription(TestCommandSender sender) {
-			// Test implementation
-		}
+		public void noDescription(TestCommandSender sender) {}
 	}
 
 	private static final class MultiAliasCommands {
 		@Definition("locale-multi")
-		@org.incendo.cloud.annotations.Command("locale <locale>")  // Only "locale" in annotation
-		public void locale(TestCommandSender sender, @Argument("locale") String locale) {
-			// Test implementation - definition has locale, language, lang
-		}
+		@org.incendo.cloud.annotations.Command("locale <locale>") // ignored for aliases
+		public void locale(TestCommandSender sender, @Argument("locale") String locale) {}
 	}
 
 	private static final class LocaleTargetCommands {
 		@Definition("locale-target")
-		@org.incendo.cloud.annotations.Command("locale <player> <locale>")  // Order might differ
+		// intentionally swapped order vs definition:
+		@org.incendo.cloud.annotations.Command("locale <locale> <player>")
 		public void localeTarget(
 				TestCommandSender sender,
 				@Argument("player") String player,
 				@Argument("locale") String locale
-		) {
-			// Test implementation - definition usage determines order
-		}
+		) {}
 	}
 
 	private static final class IgnoredAnnotationCommands {
 		@Definition("lang-test")
-		@org.incendo.cloud.annotations.Command("lang123")  // This should be completely ignored
-		public void langTest(TestCommandSender sender) {
-			// Test implementation - only lang1 and lang2 from definition should be registered
-		}
+		@org.incendo.cloud.annotations.Command("lang123") // should be ignored
+		public void langTest(TestCommandSender sender) {}
 	}
+
+	private static final class MultiWordAliasCommands {
+		@Definition("mw")
+		@org.incendo.cloud.annotations.Command("whatever <name>") // should be ignored
+		public void userAdd(TestCommandSender sender, @Argument("name") String name) {}
+	}
+
+	private static final class MultiWordAliasStandaloneCommands {
+		@Definition("mw-standalone")
+		@org.incendo.cloud.annotations.Command("whatever <name>") // should be ignored
+		public void userAdd(TestCommandSender sender, @Argument("name") String name) {}
+	}
+
+	private static final class NoAliasCommands {
+		@Definition("no-alias")
+		@org.incendo.cloud.annotations.Command("test")
+		public void test(TestCommandSender sender) {}
+	}
+
+	/* ---------------- Sender ---------------- */
 
 	private static final class TestCommandSender {
 		private final Set<String> permissions = new HashSet<>();
 		@SuppressWarnings("unused")
 		private int lastPage;
-		private final UUID uuid = UUID.randomUUID();
 
 		private TestCommandSender(String... permissions) {
-			if (permissions != null) {
-				this.permissions.addAll(Arrays.asList(permissions));
-			}
+			if (permissions != null) this.permissions.addAll(Arrays.asList(permissions));
 		}
 
 		@SuppressWarnings("unused")
@@ -496,10 +498,5 @@ class AnnotationCommandRegistrarTest {
 		void setLastPage(int page) {
 			this.lastPage = page;
 		}
-
-		UUID getUuid() {
-			return uuid;
-		}
 	}
 }
-
