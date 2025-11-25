@@ -224,6 +224,11 @@ public class CommandDefinitionRegistration<S> {
 		return rootCommand;
 	}
 
+	@NotNull
+	public CommandManager<S> getCommandManager() {
+		return commandManager;
+	}
+
 	private record ArgumentToken(String name, boolean required, boolean greedy) {
 	}
 
