@@ -54,7 +54,7 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 			CommandDefinition definition = definitionLookup.apply(definitionId.get());
 			if (definition == null) continue;
 
-			Consumer<CommandContext<S>> handler = ctx -> command.commandExecutionHandler().execute(ctx);
+			Consumer<CommandContext<S>> handler = ctx -> command.commandExecutionHandler().executeFuture(ctx);
 			registration.register(definitionId.get(), definition, handler);
 		}
 	}
