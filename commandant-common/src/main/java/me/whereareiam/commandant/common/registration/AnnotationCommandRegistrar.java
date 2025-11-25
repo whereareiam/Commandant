@@ -123,7 +123,7 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 			CommandManager<S> commandManager,
 			List<CommandComponent<S>> components
 	) {
-		CommandComponent<S> firstComponent = components.getFirst();
+		CommandComponent<S> firstComponent = components.get(0);
 		Command.Builder<S> builder = commandManager.commandBuilder(firstComponent.name());
 
 		for (int i = 1; i < components.size(); i++)
