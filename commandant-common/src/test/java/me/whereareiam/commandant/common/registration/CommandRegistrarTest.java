@@ -260,6 +260,81 @@ class AnnotationCommandRegistrarTest {
 		assertNotNull(command.commandDescription());
 	}
 
+	@Test
+	void usesDefinitionAliasesInsteadOfCommandAnnotation() {
+		// Definition has multiple aliases: locale, language, lang
+		// But @Command annotation only has "locale"
+		definitions.put("locale-multi", CommandDefinition.builder()
+				.aliases(List.of("locale", "language", "lang"))
+				.permission("intercept.locale")
+				.description("Change locale")
+				.usage("{command} {alias} <locale>")
+				.build());
+
+		registrar.register(new MultiAliasCommands());
+
+		// Should register 3 commands (one for each alias)
+		Collection<Command<TestCommandSender>> commands = commandManager.commands();
+		assertEquals(3, commands.size());
+
+		// Verify all aliases are registered
+		List<String> registeredAliases = commands.stream()
+				.map(cmd -> cmd.components().get(1).name()) // Second component is the alias
+				.toList();
+		assertTrue(registeredAliases.contains("locale"));
+		assertTrue(registeredAliases.contains("language"));
+		assertTrue(registeredAliases.contains("lang"));
+	}
+
+	@Test
+	void usesDefinitionUsageForArgumentOrder() {
+		// Definition usage has <player> <locale> order
+		// @Command annotation might have different order, but definition should take precedence
+		definitions.put("locale-target", CommandDefinition.builder()
+				.aliases(List.of("locale"))
+				.permission("intercept.locale.target")
+				.description("Change player locale")
+				.usage("{command} {alias} <player> <locale>")
+				.build());
+
+		registrar.register(new LocaleTargetCommands());
+
+		Command<TestCommandSender> command = commandManager.commands().iterator().next();
+		List<String> componentNames = command.components().stream()
+				.skip(2) // Skip "intercept" and "locale" literals
+				.map(CommandComponent::name)
+				.toList();
+		
+		// Arguments should be in definition order: player, locale
+		assertEquals("player", componentNames.get(0));
+		assertEquals("locale", componentNames.get(1));
+	}
+
+	@Test
+	void ignoresCommandAnnotationContent() {
+		// @Command annotation has "lang123" but definition has ["lang1", "lang2"]
+		// Only lang1 and lang2 should be registered, lang123 should be ignored
+		definitions.put("lang-test", CommandDefinition.builder()
+				.aliases(List.of("lang1", "lang2"))
+				.permission("intercept.lang")
+				.description("Language test")
+				.usage("{command} {alias}")
+				.build());
+
+		registrar.register(new IgnoredAnnotationCommands());
+
+		Collection<Command<TestCommandSender>> commands = commandManager.commands();
+		assertEquals(2, commands.size());
+
+		// Verify only lang1 and lang2 are registered, not lang123 from annotation
+		List<String> registeredAliases = commands.stream()
+				.map(cmd -> cmd.components().get(1).name()) // Second component is the alias
+				.toList();
+		assertTrue(registeredAliases.contains("lang1"));
+		assertTrue(registeredAliases.contains("lang2"));
+		assertFalse(registeredAliases.contains("lang123"));
+	}
+
 	private static final class HelpCommands {
 		@Definition("help")
 		@org.incendo.cloud.annotations.Command("help [page]")
@@ -366,6 +441,34 @@ class AnnotationCommandRegistrarTest {
 		@org.incendo.cloud.annotations.Command("blankdesc")
 		public void blankDescription(TestCommandSender sender) {
 			// Test implementation
+		}
+	}
+
+	private static final class MultiAliasCommands {
+		@Definition("locale-multi")
+		@org.incendo.cloud.annotations.Command("locale <locale>")  // Only "locale" in annotation
+		public void locale(TestCommandSender sender, @Argument("locale") String locale) {
+			// Test implementation - definition has locale, language, lang
+		}
+	}
+
+	private static final class LocaleTargetCommands {
+		@Definition("locale-target")
+		@org.incendo.cloud.annotations.Command("locale <player> <locale>")  // Order might differ
+		public void localeTarget(
+				TestCommandSender sender,
+				@Argument("player") String player,
+				@Argument("locale") String locale
+		) {
+			// Test implementation - definition usage determines order
+		}
+	}
+
+	private static final class IgnoredAnnotationCommands {
+		@Definition("lang-test")
+		@org.incendo.cloud.annotations.Command("lang123")  // This should be completely ignored
+		public void langTest(TestCommandSender sender) {
+			// Test implementation - only lang1 and lang2 from definition should be registered
 		}
 	}
 

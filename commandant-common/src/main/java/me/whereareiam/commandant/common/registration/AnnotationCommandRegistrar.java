@@ -14,12 +14,11 @@ import org.incendo.cloud.parser.ArgumentParser;
 import org.incendo.cloud.parser.ParserDescriptor;
 import org.incendo.cloud.permission.Permission;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Default implementation that bridges Cloud annotation parsing with {@link CommandDefinitionRegistration}.
@@ -60,17 +59,34 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 			CommandDefinition definition = definitionLookup.apply(definitionId.get());
 			if (!shouldRegister(definition)) continue;
 
-			Command.Builder<S> builder = buildCommand(
+			// Create a map of argument names to parsed components for lookup
+			Map<String, CommandComponent<S>> parsedComponentsByName = createComponentMap(parsedCommand);
+
+			// Parse arguments from definition usage
+			List<ArgumentToken> argumentTokens = parseArguments(definition.getUsage());
+
+			// Register commands based on definition structure
+			if (isSubcommand(rootCommand, definition)) {
+				registerSubcommandsFromDefinition(
+						commandManager,
+						rootCommand,
+						definition,
+						definitionId.get(),
+						argumentTokens,
+						parsedComponentsByName,
+						parsedCommand
+				);
+				continue;
+			}
+
+			registerStandaloneCommandFromDefinition(
 					commandManager,
-					rootCommand,
-					parsedCommand,
-					definition
+					definition,
+					definitionId.get(),
+					argumentTokens,
+					parsedComponentsByName,
+					parsedCommand
 			);
-
-			builder = applyMetadata(builder, definitionId.get(), definition);
-			builder = builder.handler(ctx -> parsedCommand.commandExecutionHandler().executeFuture(ctx));
-
-			commandManager.command(builder);
 		}
 	}
 
@@ -88,48 +104,150 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 				definition.getUsage().contains("{command}");
 	}
 
-	private Command.Builder<S> buildCommand(
+	private void registerSubcommandsFromDefinition(
 			CommandManager<S> commandManager,
 			String rootCommand,
-			Command<S> parsedCommand,
-			CommandDefinition definition
+			CommandDefinition definition,
+			String definitionId,
+			List<ArgumentToken> argumentTokens,
+			Map<String, CommandComponent<S>> parsedComponentsByName,
+			Command<S> parsedCommand
 	) {
-		List<CommandComponent<S>> components = parsedCommand.components();
-		if (components.isEmpty()) throw new IllegalStateException("Command has no components");
-
-		Command.Builder<S> builder;
-		if (isSubcommand(rootCommand, definition)) {
-			builder = buildSubcommand(commandManager, rootCommand, components);
-		} else {
-			builder = buildStandaloneCommand(commandManager, components);
+		List<String> aliases = sanitizeAliases(definition.getAliases());
+		if (aliases.isEmpty()) {
+			throw new IllegalArgumentException("Command must define at least one alias");
 		}
 
-		return builder;
+		// Register a command for each alias
+		for (String alias : aliases) {
+			Command.Builder<S> builder = commandManager.commandBuilder(rootCommand);
+
+			// Split multi-word aliases (e.g., "database upload" -> ["database", "upload"])
+			for (String literal : splitAlias(alias))
+				builder = builder.literal(literal);
+
+			// Add arguments from definition usage
+			for (ArgumentToken token : argumentTokens) {
+				CommandComponent<S> parsedComponent = parsedComponentsByName.get(token.name());
+				if (parsedComponent != null) builder = addComponent(builder, parsedComponent);
+			}
+
+			builder = applyMetadata(builder, definitionId, definition);
+			builder = builder.handler(ctx -> parsedCommand.commandExecutionHandler().executeFuture(ctx));
+
+			commandManager.command(builder);
+		}
 	}
 
-	private Command.Builder<S> buildSubcommand(
+	private void registerStandaloneCommandFromDefinition(
 			CommandManager<S> commandManager,
-			String rootCommand,
-			List<CommandComponent<S>> components
+			CommandDefinition definition,
+			String definitionId,
+			List<ArgumentToken> argumentTokens,
+			Map<String, CommandComponent<S>> parsedComponentsByName,
+			Command<S> parsedCommand
 	) {
-		Command.Builder<S> builder = commandManager.commandBuilder(rootCommand);
-		for (CommandComponent<S> component : components)
-			builder = addComponent(builder, component);
+		List<String> aliases = sanitizeAliases(definition.getAliases());
+		if (aliases.isEmpty()) throw new IllegalArgumentException("Command must define at least one alias");
 
-		return builder;
+		String primary = aliases.get(0);
+		String[] secondary = aliases.stream()
+				.skip(1)
+				.filter(alias -> !alias.contains(" "))
+				.toArray(String[]::new);
+
+		Command.Builder<S> builder = commandManager.commandBuilder(primary, secondary);
+
+		// Add arguments from definition usage
+		for (ArgumentToken token : argumentTokens) {
+			CommandComponent<S> parsedComponent = parsedComponentsByName.get(token.name());
+			if (parsedComponent != null) builder = addComponent(builder, parsedComponent);
+		}
+
+		builder = applyMetadata(builder, definitionId, definition);
+		builder = builder.handler(ctx -> parsedCommand.commandExecutionHandler().executeFuture(ctx));
+
+		commandManager.command(builder);
+
+		// Register multi-word aliases as separate commands
+		aliases.stream()
+				.skip(1)
+				.filter(alias -> alias.contains(" "))
+				.forEach(alias -> {
+					Command.Builder<S> aliasBuilder = commandManager.commandBuilder(primary);
+					for (String literal : splitAlias(alias)) {
+						aliasBuilder = aliasBuilder.literal(literal);
+					}
+
+					// Add arguments
+					for (ArgumentToken token : argumentTokens) {
+						CommandComponent<S> parsedComponent = parsedComponentsByName.get(token.name());
+						if (parsedComponent != null) {
+							aliasBuilder = addComponent(aliasBuilder, parsedComponent);
+						}
+					}
+
+					aliasBuilder = applyMetadata(aliasBuilder, definitionId, definition);
+					aliasBuilder = aliasBuilder.handler(ctx -> parsedCommand.commandExecutionHandler().executeFuture(ctx));
+
+					commandManager.command(aliasBuilder);
+				});
 	}
 
-	private Command.Builder<S> buildStandaloneCommand(
-			CommandManager<S> commandManager,
-			List<CommandComponent<S>> components
-	) {
-		CommandComponent<S> firstComponent = components.get(0);
-		Command.Builder<S> builder = commandManager.commandBuilder(firstComponent.name());
+	private List<String> splitAlias(String alias) {
+		return List.of(alias.trim().split("\\s+"));
+	}
 
-		for (int i = 1; i < components.size(); i++)
-			builder = addComponent(builder, components.get(i));
+	private Map<String, CommandComponent<S>> createComponentMap(Command<S> parsedCommand) {
+		Map<String, CommandComponent<S>> map = new HashMap<>();
+		for (CommandComponent<S> component : parsedCommand.components()) {
+			// Skip literal components (they're part of the command structure, not arguments)
+			if (component.type() == CommandComponent.ComponentType.LITERAL) {
+				continue;
+			}
+			map.put(component.name(), component);
+		}
+		return map;
+	}
 
-		return builder;
+	private List<ArgumentToken> parseArguments(@Nullable String usage) {
+		if (usage == null || usage.isBlank())
+			return Collections.emptyList();
+
+		List<ArgumentToken> tokens = new ArrayList<>();
+		for (String token : usage.split("\\s+")) {
+			if (token.isBlank() || isPlaceholder(token)) continue;
+
+			boolean required = token.startsWith("<") && token.endsWith(">");
+			boolean optional = token.startsWith("[") && token.endsWith("]");
+
+			if (!required && !optional) continue;
+
+			String cleaned = token.substring(1, token.length() - 1).trim();
+			boolean greedy = cleaned.endsWith("...");
+			if (greedy) cleaned = cleaned.substring(0, cleaned.length() - 3);
+
+			if (!cleaned.isEmpty()) tokens.add(new ArgumentToken(cleaned, required, greedy));
+		}
+
+		return tokens;
+	}
+
+	private boolean isPlaceholder(String token) {
+		return token.startsWith("{") && token.endsWith("}");
+	}
+
+
+	private List<String> sanitizeAliases(List<String> aliases) {
+		if (aliases == null || aliases.isEmpty()) {
+			return Collections.emptyList();
+		}
+
+		return aliases.stream()
+				.filter(Objects::nonNull)
+				.map(String::trim)
+				.filter(alias -> !alias.isEmpty())
+				.collect(Collectors.toList());
 	}
 
 	private Command.Builder<S> applyMetadata(
@@ -197,5 +315,7 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 			return true;
 		}
 	}
+
+	private record ArgumentToken(String name, boolean required, boolean greedy) {}
 }
 
