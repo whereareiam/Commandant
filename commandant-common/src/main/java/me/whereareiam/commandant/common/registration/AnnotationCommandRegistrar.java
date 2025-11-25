@@ -13,6 +13,7 @@ import org.incendo.cloud.execution.ExecutionCoordinator;
 import org.incendo.cloud.internal.CommandRegistrationHandler;
 import org.incendo.cloud.parser.ArgumentParser;
 import org.incendo.cloud.parser.ParserDescriptor;
+import org.incendo.cloud.parser.ParserRegistry;
 import org.incendo.cloud.permission.Permission;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -38,7 +39,8 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 		this.registration = Objects.requireNonNull(registration, "registration");
 		this.definitionLookup = Objects.requireNonNull(definitionLookup, "definitionLookup");
 
-		RecordingCommandManager<S> recordingManager = new RecordingCommandManager<>();
+		CommandManager<S> realManager = registration.getCommandManager();
+		RecordingCommandManager<S> recordingManager = new RecordingCommandManager<>(realManager);
 		this.annotationParser = new AnnotationParser<>(recordingManager, senderType);
 		this.annotationParser.registerBuilderModifier(
 				Definition.class,
@@ -344,7 +346,8 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 		CommandComponent.Builder componentBuilder = CommandComponent.builder()
 				.name(component.name())
 				.parser(parserDescriptor)
-				.description(component.description());
+				.description(component.description())
+				.suggestionProvider(component.suggestionProvider());
 
 		if (component.hasDefaultValue())
 			componentBuilder = componentBuilder.defaultValue(component.defaultValue());
@@ -353,13 +356,25 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 	}
 
 	private static final class RecordingCommandManager<S> extends CommandManager<S> {
-		RecordingCommandManager() {
+		private final CommandManager<S> realManager;
+
+		RecordingCommandManager(@NotNull CommandManager<S> realManager) {
 			super(ExecutionCoordinator.simpleCoordinator(), CommandRegistrationHandler.nullCommandRegistrationHandler());
+			this.realManager = realManager;
 		}
 
 		@Override
 		public boolean hasPermission(@NotNull S sender, @NotNull String permission) {
 			return true;
+		}
+
+		/**
+		 * Delegates to the real command manager's parser registry so that
+		 * suggestions registered in the real manager are available during parsing.
+		 */
+		@Override
+		public @NotNull ParserRegistry<S> parserRegistry() {
+			return realManager.parserRegistry();
 		}
 	}
 
