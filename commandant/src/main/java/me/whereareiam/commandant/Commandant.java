@@ -70,24 +70,6 @@ public final class Commandant {
 	}
 
 	/**
-	 * Creates an {@link CommandRegistrar} that binds Cloud-annotated handlers to {@link CommandDefinition} entries.
-	 *
-	 * @param registration     command definition registration target
-	 * @param senderType       sender class
-	 * @param definitionLookup lookup for definition ids
-	 * @param <S>              sender type
-	 * @return registrar
-	 */
-	@NotNull
-	public static <S> CommandRegistrar<S> createAnnotationRegistrar(
-			@NotNull CommandDefinitionRegistration<S> registration,
-			@NotNull Class<S> senderType,
-			@NotNull Function<String, CommandDefinition> definitionLookup
-	) {
-		return new AnnotationCommandRegistrar<>(registration, senderType, definitionLookup);
-	}
-
-	/**
 	 * Creates and registers a CommandExceptionHandler with the given command manager.
 	 *
 	 * @param exceptionMessages The exception message configuration
