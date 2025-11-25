@@ -1,24 +1,21 @@
 package me.whereareiam.commandant;
 
 import me.whereareiam.commandant.common.CommandExceptionHandler;
+import me.whereareiam.commandant.common.registration.AnnotationCommandRegistrar;
 import me.whereareiam.commandant.common.registration.CommandDefinitionRegistration;
-import me.whereareiam.commandant.common.registration.type.AnnotationRegistrar;
-import me.whereareiam.commandant.common.registration.type.ProgrammaticRegistrar;
 import me.whereareiam.commandant.model.CommandDefinition;
 import me.whereareiam.commandant.model.message.ExceptionMessages;
 import me.whereareiam.commandant.registration.CommandRegistrar;
-import me.whereareiam.commandant.registration.type.AnnotationCommandRegistrar;
-import me.whereareiam.commandant.registration.type.ProgrammaticCommandRegistrar;
 import me.whereareiam.keystone.Actor;
 import me.whereareiam.keystone.serializer.SerializerEngine;
 import org.incendo.cloud.CommandManager;
 import org.incendo.cloud.minecraft.extras.AudienceProvider;
-import org.incendo.cloud.suggestion.SuggestionProvider;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Function;
 
 /**
@@ -27,68 +24,6 @@ import java.util.function.Function;
  */
 @SuppressWarnings("unused")
 public final class Commandant {
-	/**
-	 * Creates a new CommandRegistrar instance for Actor types.
-	 * Uses Actor.getUniqueId() automatically for cooldown tracking.
-	 *
-	 * @param commandManager The command manager to registration commands with
-	 * @param <S>            The sender type (must extend Actor)
-	 * @return A new CommandRegistrar instance
-	 */
-	@NotNull
-	public static <S extends Actor> CommandRegistrar<S> createRegistrar(
-			@NotNull CommandManager<S> commandManager
-	) {
-		return createRegistrar(commandManager, name -> null);
-	}
-
-	@NotNull
-	public static <S extends Actor> CommandRegistrar<S> createRegistrar(
-			@NotNull CommandManager<S> commandManager,
-			@NotNull Function<String, SuggestionProvider<S>> suggestionResolver
-	) {
-		return createProgrammaticRegistrar(commandManager, suggestionResolver);
-	}
-
-	/**
-	 * Creates a programmatic command registrar for Actor types.
-	 * This registrar supports registering commands directly from {@link CommandDefinition}s.
-	 *
-	 * @param commandManager     The command manager to registration commands with
-	 * @param suggestionResolver Function to resolve suggestion providers by name
-	 * @param <S>                The sender type (must extend Actor)
-	 * @return A new ProgrammaticCommandRegistrar instance
-	 */
-	@NotNull
-	public static <S extends Actor> ProgrammaticCommandRegistrar<S> createProgrammaticRegistrar(
-			@NotNull CommandManager<S> commandManager,
-			@NotNull Function<String, SuggestionProvider<S>> suggestionResolver
-	) {
-		return ProgrammaticRegistrar.create(commandManager, Actor::getUniqueId, suggestionResolver);
-	}
-
-	/**
-	 * Creates an annotation-based command registrar for Actor types.
-	 * This registrar supports registering commands from Cloud's annotation API.
-	 *
-	 * @param commandManager     The command manager to register commands with
-	 * @param suggestionResolver Function to resolve suggestion providers by name
-	 * @param <S>                The sender type (must extend Actor)
-	 * @return A new AnnotationCommandRegistrar instance
-	 */
-	@NotNull
-	public static <S extends Actor> AnnotationCommandRegistrar<S> createAnnotationRegistrar(
-			@NotNull CommandManager<S> commandManager,
-			@NotNull Function<String, SuggestionProvider<S>> suggestionResolver
-	) {
-		CommandDefinitionRegistration<S> definitionRegistration = new CommandDefinitionRegistration<>(
-				commandManager,
-				Actor::getUniqueId,
-				suggestionResolver
-		);
-		return new AnnotationRegistrar<>(definitionRegistration);
-	}
-
 	/**
 	 * Creates a command key extractor that matches Command instances to config keys
 	 * by comparing their CommandDefinition properties.
@@ -109,6 +44,47 @@ public final class Commandant {
 					.findFirst()
 					.orElse(null);
 		};
+	}
+
+	/**
+	 * Creates an {@link CommandRegistrar} that binds Cloud-annotated handlers to {@link CommandDefinition} entries.
+	 *
+	 * @param commandManager   the command manager to register commands with
+	 * @param cooldownResolver function to resolve cooldown keys from senders
+	 * @param senderType       sender class
+	 * @param definitionLookup lookup for definition ids
+	 * @param <S>              sender type
+	 * @return registrar
+	 */
+	@NotNull
+	public static <S> CommandRegistrar<S> createAnnotationRegistrar(
+			@NotNull CommandManager<S> commandManager,
+			@NotNull Function<S, UUID> cooldownResolver,
+			@NotNull Class<S> senderType,
+			@NotNull Function<String, CommandDefinition> definitionLookup
+	) {
+		CommandDefinitionRegistration<S> registration = new CommandDefinitionRegistration<>(
+				commandManager
+		);
+		return new AnnotationCommandRegistrar<>(registration, senderType, definitionLookup);
+	}
+
+	/**
+	 * Creates an {@link CommandRegistrar} that binds Cloud-annotated handlers to {@link CommandDefinition} entries.
+	 *
+	 * @param registration     command definition registration target
+	 * @param senderType       sender class
+	 * @param definitionLookup lookup for definition ids
+	 * @param <S>              sender type
+	 * @return registrar
+	 */
+	@NotNull
+	public static <S> CommandRegistrar<S> createAnnotationRegistrar(
+			@NotNull CommandDefinitionRegistration<S> registration,
+			@NotNull Class<S> senderType,
+			@NotNull Function<String, CommandDefinition> definitionLookup
+	) {
+		return new AnnotationCommandRegistrar<>(registration, senderType, definitionLookup);
 	}
 
 	/**

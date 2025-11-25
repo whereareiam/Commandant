@@ -1,8 +1,7 @@
 package me.whereareiam.commandant.common;
 
-import me.whereareiam.commandant.common.registration.type.ProgrammaticRegistrar;
+import me.whereareiam.commandant.common.registration.CommandDefinitionRegistration;
 import me.whereareiam.commandant.model.CommandDefinition;
-import me.whereareiam.commandant.registration.type.ProgrammaticCommandRegistrar;
 import org.incendo.cloud.Command;
 import org.incendo.cloud.CommandManager;
 import org.incendo.cloud.component.CommandComponent;
@@ -17,10 +16,9 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class DefaultCommandRegistrarTest {
-
+class DefinitionRegistrationTest {
 	private CommandManager<TestCommandSender> commandManager;
-	private ProgrammaticCommandRegistrar<TestCommandSender> registrar;
+	private CommandDefinitionRegistration<TestCommandSender> registration;
 
 	@BeforeEach
 	void setUp() {
@@ -37,15 +35,13 @@ class DefaultCommandRegistrarTest {
 			}
 		};
 
-		this.registrar = ProgrammaticRegistrar.create(
-				commandManager,
-				TestCommandSender::getUuid
+		this.registration = new CommandDefinitionRegistration<>(
+				commandManager
 		);
 	}
 
 	@Test
 	void testRootCommandRegistration() {
-		// Arrange
 		CommandDefinition definition = CommandDefinition.builder()
 				.enabled(true)
 				.aliases(List.of("test", "t"))
@@ -54,10 +50,8 @@ class DefaultCommandRegistrarTest {
 
 		Consumer<CommandContext<TestCommandSender>> handler = context -> {};
 
-		// Act
-		registrar.registerCommand(definition, handler);
+		registration.register(definition, handler);
 
-		// Assert
 		Collection<Command<TestCommandSender>> commands = commandManager.commands();
 		assertEquals(1, commands.size());
 
@@ -66,26 +60,20 @@ class DefaultCommandRegistrarTest {
 		assertEquals("test", command.components().get(0).name());
 		assertEquals("Test command", command.commandDescription().description().textDescription());
 
-		// Verify aliases are registered
 		assertNotNull(commandManager.commandTree().getNamedNode("test"));
 		assertNotNull(commandManager.commandTree().getNamedNode("t"));
 	}
 
 	@Test
 	void testCommandWithPermission() {
-		// Arrange
 		CommandDefinition definition = CommandDefinition.builder()
 				.enabled(true)
 				.aliases(List.of("admin"))
 				.permission("admin.test")
 				.build();
 
-		Consumer<CommandContext<TestCommandSender>> handler = context -> {};
+		registration.register(definition, context -> {});
 
-		// Act
-		registrar.registerCommand(definition, handler);
-
-		// Assert
 		Command<TestCommandSender> command = commandManager.commands().iterator().next();
 		assertEquals("admin.test", command.commandPermission().permissionString());
 
@@ -97,7 +85,6 @@ class DefaultCommandRegistrarTest {
 
 	@Test
 	void testCommandWithArguments() {
-		// Arrange - test required, optional, and greedy arguments
 		Map<String, String> args = new HashMap<>();
 		args.put("player", "Player name");
 		args.put("message", "Optional message");
@@ -110,14 +97,10 @@ class DefaultCommandRegistrarTest {
 				.arguments(args)
 				.build();
 
-		Consumer<CommandContext<TestCommandSender>> handler = context -> {};
+		registration.register(definition, context -> {});
 
-		// Act
-		registrar.registerCommand(definition, handler);
-
-		// Assert
 		Command<TestCommandSender> command = commandManager.commands().iterator().next();
-		assertEquals(4, command.components().size()); // root + 3 arguments
+		assertEquals(4, command.components().size());
 
 		CommandComponent<TestCommandSender> playerArg = command.components().get(1);
 		assertEquals("player", playerArg.name());
@@ -135,8 +118,7 @@ class DefaultCommandRegistrarTest {
 
 	@Test
 	void testSubcommandRegistration() {
-		// Arrange
-		registrar.setRootCommand("intercept");
+		registration.setRootCommand("intercept");
 
 		CommandDefinition definition = CommandDefinition.builder()
 				.enabled(true)
@@ -145,14 +127,10 @@ class DefaultCommandRegistrarTest {
 				.description("Reload subcommand")
 				.build();
 
-		Consumer<CommandContext<TestCommandSender>> handler = context -> {};
+		registration.register(definition, context -> {});
 
-		// Act
-		registrar.registerCommand(definition, handler);
-
-		// Assert
 		Command<TestCommandSender> command = commandManager.commands().iterator().next();
-		assertEquals(2, command.components().size()); // root + subcommand
+		assertEquals(2, command.components().size());
 		assertEquals("intercept", command.components().get(0).name());
 		assertTrue(command.components().get(1).name().equals("reload") ||
 				command.components().get(1).name().equals("rl"));
@@ -160,8 +138,7 @@ class DefaultCommandRegistrarTest {
 
 	@Test
 	void testSubcommandWithMultiWordAlias() {
-		// Arrange
-		registrar.setRootCommand("intercept");
+		registration.setRootCommand("intercept");
 
 		CommandDefinition definition = CommandDefinition.builder()
 				.enabled(true)
@@ -169,27 +146,21 @@ class DefaultCommandRegistrarTest {
 				.usage("{command} database upload")
 				.build();
 
-		Consumer<CommandContext<TestCommandSender>> handler = context -> {};
+		registration.register(definition, context -> {});
 
-		// Act
-		registrar.registerCommand(definition, handler);
-
-		// Assert
 		Collection<Command<TestCommandSender>> commands = commandManager.commands();
 		assertFalse(commands.isEmpty());
 
-		// Verify "database upload" path exists
 		boolean foundDatabaseUpload = commands.stream()
 				.anyMatch(cmd -> cmd.components().size() >= 3 &&
-						cmd.components().get(1).name().equals("database") &&
-						cmd.components().get(2).name().equals("upload"));
-		assertTrue(foundDatabaseUpload, "Should have registered 'database upload' subcommand");
+						"database".equals(cmd.components().get(1).name()) &&
+						"upload".equals(cmd.components().get(2).name()));
+		assertTrue(foundDatabaseUpload);
 	}
 
 	@Test
 	void testSubcommandWithArguments() {
-		// Arrange
-		registrar.setRootCommand("intercept");
+		registration.setRootCommand("intercept");
 
 		Map<String, String> args = new HashMap<>();
 		args.put("key", "Key");
@@ -202,21 +173,16 @@ class DefaultCommandRegistrarTest {
 				.arguments(args)
 				.build();
 
-		Consumer<CommandContext<TestCommandSender>> handler = context -> {};
+		registration.register(definition, context -> {});
 
-		// Act
-		registrar.registerCommand(definition, handler);
-
-		// Assert
 		Command<TestCommandSender> command = commandManager.commands().iterator().next();
-		assertEquals(4, command.components().size()); // root + subcommand + 2 arguments
+		assertEquals(4, command.components().size());
 		assertEquals("key", command.components().get(2).name());
 		assertEquals("value", command.components().get(3).name());
 	}
 
 	@Test
 	void testCommandWithCooldown() {
-		// Arrange
 		CommandDefinition.Cooldown cooldown = CommandDefinition.Cooldown.builder()
 				.enabled(true)
 				.duration(5)
@@ -229,72 +195,77 @@ class DefaultCommandRegistrarTest {
 				.cooldown(cooldown)
 				.build();
 
-		Consumer<CommandContext<TestCommandSender>> handler = context -> {};
+		registration.register(definition, context -> {});
 
-		// Act
-		registrar.registerCommand(definition, handler);
-
-		// Assert - cooldown is applied via post-processor, just verify command was registered
 		assertEquals(1, commandManager.commands().size());
 	}
 
 	@Test
 	void testDisabledCommandNotRegistered() {
-		// Arrange
 		CommandDefinition definition = CommandDefinition.builder()
 				.enabled(false)
 				.aliases(List.of("test"))
 				.build();
 
-		Consumer<CommandContext<TestCommandSender>> handler = context -> {};
+		registration.register(definition, context -> {});
 
-		// Act
-		registrar.registerCommand(definition, handler);
-
-		// Assert
 		assertTrue(commandManager.commands().isEmpty());
 	}
 
 	@Test
 	void testInvalidAliasesThrowsException() {
-		// Test empty aliases
 		CommandDefinition emptyAliases = CommandDefinition.builder()
 				.enabled(true)
 				.aliases(Collections.emptyList())
 				.build();
 
-		assertThrows(IllegalArgumentException.class, () -> registrar.registerCommand(emptyAliases, context -> {}));
+		assertThrows(IllegalArgumentException.class, () -> registration.register(emptyAliases, context -> {}));
 
-		// Test null aliases
 		CommandDefinition nullAliases = CommandDefinition.builder()
 				.enabled(true)
 				.aliases(null)
 				.build();
 
-		assertThrows(IllegalArgumentException.class, () -> registrar.registerCommand(nullAliases, context -> {}));
+		assertThrows(IllegalArgumentException.class, () -> registration.register(nullAliases, context -> {}));
 	}
 
 	@Test
 	void testRootCommandGetterAndSetter() {
-		assertNull(registrar.getRootCommand());
-		registrar.setRootCommand("intercept");
-		assertEquals("intercept", registrar.getRootCommand());
+		assertNull(registration.getRootCommand());
+		registration.setRootCommand("intercept");
+		assertEquals("intercept", registration.getRootCommand());
 	}
 
 	@Test
 	void testUsageWithPlaceholderNotSubcommand() {
-		// Usage contains {command} but no root command is set, so it should registration as root command
 		CommandDefinition definition = CommandDefinition.builder()
 				.enabled(true)
 				.aliases(List.of("test"))
 				.usage("{command} something")
 				.build();
 
-		registrar.registerCommand(definition, context -> {});
+		registration.register(definition, context -> {});
 
 		Command<TestCommandSender> command = commandManager.commands().iterator().next();
-		assertEquals(1, command.components().size()); // Only root, no subcommand
+		assertEquals(1, command.components().size());
 		assertEquals("test", command.components().get(0).name());
 	}
 
+	private static final class TestCommandSender {
+		private final Set<String> permissions = new HashSet<>();
+
+		private TestCommandSender(String... permissions) {
+			if (permissions != null) {
+				Collections.addAll(this.permissions, permissions);
+			}
+		}
+
+		private TestCommandSender() {
+			this(new String[0]);
+		}
+
+		boolean hasPermission(String permission) {
+			return permission == null || permission.isBlank() || permissions.contains(permission);
+		}
+	}
 }

@@ -1,38 +1,37 @@
 package me.whereareiam.commandant.registration;
 
-import org.incendo.cloud.CommandManager;
+import me.whereareiam.commandant.model.CommandDefinition;
+import org.incendo.cloud.Command;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+
+import java.util.Optional;
 
 /**
- * Base interface for command registrars.
- * Provides common functionality for managing root commands and accessing the command manager.
+ * API surface for registering Cloud-annotated commands that should be mapped to {@link CommandDefinition} entries.
  *
- * @param <S> The sender type (e.g., DummyPlayer, CommandSender, Audience)
+ * @param <S> sender type
  */
-@SuppressWarnings("unused")
 public interface CommandRegistrar<S> {
 	/**
-	 * Sets the root command. After this is called, commands with "{command}" in their usage
-	 * field will be registered as subcommands under this root command.
+	 * Registers the provided command containers.
 	 *
-	 * @param rootCommandName The root command name (e.g., "intercept")
+	 * @param containers instances containing Cloud annotations
 	 */
-	void setRootCommand(@NotNull String rootCommandName);
+	void register(@NotNull Object... containers);
 
 	/**
-	 * Gets the current root command name, if set.
+	 * Sets the literal root command (e.g., {@code "intercept"}) that annotated subcommands should attach to.
 	 *
-	 * @return The root command name, or null if not set
+	 * @param root literal root command name
 	 */
-	@Nullable
-	String getRootCommand();
+	void setRootCommand(@NotNull String root);
 
 	/**
-	 * Gets the underlying command manager.
+	 * Resolves the {@link CommandDefinition} that was used when registering the given command.
 	 *
-	 * @return The command manager
+	 * @param command registered Cloud command
+	 * @return optional definition
 	 */
 	@NotNull
-	CommandManager<S> getCommandManager();
+	Optional<CommandDefinition> resolveDefinition(@NotNull Command<S> command);
 }
