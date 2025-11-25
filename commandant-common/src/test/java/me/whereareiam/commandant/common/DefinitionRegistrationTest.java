@@ -182,6 +182,23 @@ class DefinitionRegistrationTest {
 	}
 
 	@Test
+	void testStandaloneCommandWhenRootConfigured() {
+		registration.setRootCommand("intercept");
+
+		CommandDefinition definition = CommandDefinition.builder()
+				.enabled(true)
+				.aliases(List.of("locale"))
+				.usage("{alias} <locale>")
+				.build();
+
+		registration.register(definition, context -> {});
+
+		Command<TestCommandSender> command = commandManager.commands().iterator().next();
+		assertEquals(2, command.components().size());
+		assertEquals("locale", command.components().get(0).name());
+	}
+
+	@Test
 	void testCommandWithCooldown() {
 		CommandDefinition.Cooldown cooldown = CommandDefinition.Cooldown.builder()
 				.enabled(true)

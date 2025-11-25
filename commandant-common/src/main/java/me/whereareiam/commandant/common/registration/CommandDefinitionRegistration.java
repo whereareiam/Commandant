@@ -59,11 +59,12 @@ public class CommandDefinitionRegistration<S> {
 
 		List<ArgumentToken> arguments = parseArguments(definition.getUsage());
 
-		if (rootCommand == null) {
-			registerRoot(definitionId, definition, handler, aliases, arguments);
-		} else {
+		if (shouldRegisterAsSubcommand(definition)) {
 			registerSubcommand(definitionId, definition, handler, aliases, arguments);
+			return;
 		}
+
+		registerRoot(definitionId, definition, handler, aliases, arguments);
 	}
 
 	private void registerRoot(
@@ -224,6 +225,14 @@ public class CommandDefinitionRegistration<S> {
 	}
 
 	private record ArgumentToken(String name, boolean required, boolean greedy) {
+	}
+
+	private boolean shouldRegisterAsSubcommand(@NotNull CommandDefinition definition) {
+		return rootCommand != null && usageContainsCommandPlaceholder(definition.getUsage());
+	}
+
+	private boolean usageContainsCommandPlaceholder(@Nullable String usage) {
+		return usage != null && usage.contains("{command}");
 	}
 }
 
