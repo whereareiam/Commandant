@@ -48,28 +48,25 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 
 	@Override
 	public void register(@NotNull Object... containers) {
-		CommandManager<S> commandManager = registration.getCommandManager();
-		String rootCommand = registration.getRootCommand();
+		CommandManager<S> manager = registration.getCommandManager();
+		String root = registration.getRootCommand();
 
 		for (Command<S> parsed : this.annotationParser.parse(containers)) {
-			String definitionId = parsed.commandMeta()
-					.optional(CommandDefinitionRegistration.DEFINITION_ID_KEY)
-					.orElse(null);
-
+			String definitionId = definitionId(parsed);
 			if (definitionId == null) continue;
 
 			CommandDefinition definition = definitionLookup.apply(definitionId);
 			if (definition == null || !definition.isEnabled()) continue;
 
 			Map<String, CommandComponent<S>> componentsByName = indexArgumentComponents(parsed);
-			List<ArgumentToken> argumentTokens = parseArguments(definition.getUsage());
+			List<ArgumentToken> tokens = parseArguments(definition.getUsage());
 
-			if (isSubcommand(rootCommand, definition)) {
-				registerSubcommands(commandManager, rootCommand, definition, definitionId, argumentTokens, componentsByName, parsed);
+			if (isSubcommand(root, definition)) {
+				registerFromDefinition(manager, root, definition, definitionId, tokens, componentsByName, parsed);
 				continue;
 			}
 
-			registerStandalone(commandManager, definition, definitionId, argumentTokens, componentsByName, parsed);
+			registerFromDefinition(manager, null, definition, definitionId, tokens, componentsByName, parsed);
 		}
 	}
 
@@ -85,72 +82,118 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 				.map(definitionLookup);
 	}
 
+	private @Nullable String definitionId(Command<S> parsed) {
+		return parsed.commandMeta()
+				.optional(CommandDefinitionRegistration.DEFINITION_ID_KEY)
+				.orElse(null);
+	}
+
 	private boolean isSubcommand(@Nullable String rootCommand, @NotNull CommandDefinition definition) {
 		String usage = definition.getUsage();
 		return rootCommand != null && usage != null && usage.contains("{command}");
 	}
 
-	private void registerSubcommands(
-			CommandManager<S> commandManager,
-			String rootCommand,
+	private void registerFromDefinition(
+			CommandManager<S> manager,
+			@Nullable String rootCommand,
 			CommandDefinition definition,
 			String definitionId,
 			List<ArgumentToken> argumentTokens,
 			Map<String, CommandComponent<S>> componentsByName,
 			Command<S> parsedCommand
 	) {
-		List<String> aliases = sanitizeAliases(definition.getAliases());
-		if (aliases.isEmpty()) throw new IllegalArgumentException("Command must define at least one alias");
+		List<String> aliases = requireAliases(definition);
 
 		AliasGroups groups = splitAliases(aliases);
 
-		if (!groups.singleWord().isEmpty()) {
-			String primary = groups.singleWord().get(0);
-			String[] secondary = groups.singleWord().stream().skip(1).toArray(String[]::new);
+		registerSingleWordAliases(manager, rootCommand, groups.singleWord(), definition, definitionId, argumentTokens, componentsByName, parsedCommand);
+		registerMultiWordAliases(manager, rootCommand, groups.multiWord(), definition, definitionId, argumentTokens, componentsByName, parsedCommand);
+	}
 
-			Command.Builder<S> builder = commandManager.commandBuilder(rootCommand).literal(primary, secondary);
-			registerBuilt(commandManager, builder, definition, definitionId, argumentTokens, componentsByName, parsedCommand);
-		}
+	private List<String> requireAliases(CommandDefinition definition) {
+		List<String> aliases = sanitizeAliases(definition.getAliases());
+		if (!aliases.isEmpty()) return aliases;
+		throw new IllegalArgumentException("Command must define at least one alias");
+	}
 
-		for (String multiWord : groups.multiWord()) {
-			Command.Builder<S> builder = commandManager.commandBuilder(rootCommand);
-			for (String literal : splitAlias(multiWord)) builder = builder.literal(literal);
+	private void registerSingleWordAliases(
+			CommandManager<S> manager,
+			@Nullable String rootCommand,
+			List<String> singleWordAliases,
+			CommandDefinition definition,
+			String definitionId,
+			List<ArgumentToken> argumentTokens,
+			Map<String, CommandComponent<S>> componentsByName,
+			Command<S> parsedCommand
+	) {
+		if (singleWordAliases.isEmpty()) return;
 
-			registerBuilt(commandManager, builder, definition, definitionId, argumentTokens, componentsByName, parsedCommand);
+		String primary = singleWordAliases.get(0);
+		String[] secondary = singleWordAliases.stream().skip(1).toArray(String[]::new);
+
+		Command.Builder<S> builder = (rootCommand != null)
+				? manager.commandBuilder(rootCommand).literal(primary, secondary)
+				: manager.commandBuilder(primary, secondary);
+
+		registerBuilt(manager, builder, definition, definitionId, argumentTokens, componentsByName, parsedCommand);
+	}
+
+	/**
+	 * Multi-word aliases are grouped by their prefix (all tokens except the last),
+	 * so we can register:
+	 * <p>
+	 * - "database download"
+	 * - "database d"
+	 * <p>
+	 * as a single command path: "database" + ("download" | "d")
+	 * <p>
+	 * Works for deeper paths too:
+	 * - "db user add"
+	 * - "db user a"
+	 * <p>
+	 * becomes: "db" "user" + ("add" | "a")
+	 */
+	private void registerMultiWordAliases(
+			CommandManager<S> manager,
+			@Nullable String rootCommand,
+			List<String> multiWordAliases,
+			CommandDefinition definition,
+			String definitionId,
+			List<ArgumentToken> argumentTokens,
+			Map<String, CommandComponent<S>> componentsByName,
+			Command<S> parsedCommand
+	) {
+		if (multiWordAliases.isEmpty()) return;
+
+		Map<List<String>, List<String>> grouped = groupByPrefix(multiWordAliases);
+
+		for (Map.Entry<List<String>, List<String>> entry : grouped.entrySet()) {
+			List<String> prefix = entry.getKey();
+			List<String> suffixes = distinct(entry.getValue());
+			if (prefix.isEmpty() || suffixes.isEmpty()) continue;
+
+			Command.Builder<S> builder = baseBuilder(manager, rootCommand, prefix);
+			builder = builder.literal(suffixes.get(0), suffixes.stream().skip(1).toArray(String[]::new));
+
+			registerBuilt(manager, builder, definition, definitionId, argumentTokens, componentsByName, parsedCommand);
 		}
 	}
 
-	private void registerStandalone(
-			CommandManager<S> commandManager,
-			CommandDefinition definition,
-			String definitionId,
-			List<ArgumentToken> argumentTokens,
-			Map<String, CommandComponent<S>> componentsByName,
-			Command<S> parsedCommand
-	) {
-		List<String> aliases = sanitizeAliases(definition.getAliases());
-		if (aliases.isEmpty()) throw new IllegalArgumentException("Command must define at least one alias");
-
-		AliasGroups groups = splitAliases(aliases);
-
-		if (!groups.singleWord().isEmpty()) {
-			String primary = groups.singleWord().get(0);
-			String[] secondary = groups.singleWord().stream().skip(1).toArray(String[]::new);
-
-			Command.Builder<S> builder = commandManager.commandBuilder(primary, secondary);
-			registerBuilt(commandManager, builder, definition, definitionId, argumentTokens, componentsByName, parsedCommand);
+	private Command.Builder<S> baseBuilder(CommandManager<S> manager, @Nullable String rootCommand, List<String> prefixParts) {
+		if (rootCommand != null) {
+			Command.Builder<S> b = manager.commandBuilder(rootCommand);
+			for (String p : prefixParts) b = b.literal(p);
+			return b;
 		}
 
-		for (String multiWord : groups.multiWord()) {
-			// Note: build from the multi-word alias itself (avoids duplicating the first token).
-			List<String> parts = splitAlias(multiWord);
-			if (parts.isEmpty()) continue;
+		Command.Builder<S> b = manager.commandBuilder(prefixParts.get(0));
+		for (int i = 1; i < prefixParts.size(); i++) b = b.literal(prefixParts.get(i));
+		return b;
+	}
 
-			Command.Builder<S> builder = commandManager.commandBuilder(parts.get(0));
-			for (int i = 1; i < parts.size(); i++) builder = builder.literal(parts.get(i));
-
-			registerBuilt(commandManager, builder, definition, definitionId, argumentTokens, componentsByName, parsedCommand);
-		}
+	private List<String> distinct(List<String> in) {
+		if (in.isEmpty()) return in;
+		return new ArrayList<>(new LinkedHashSet<>(in));
 	}
 
 	private void registerBuilt(
@@ -178,7 +221,6 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 			if (component == null) continue;
 			builder = addComponent(builder, component);
 		}
-
 		return builder;
 	}
 
@@ -187,11 +229,8 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 		List<String> multiWord = new ArrayList<>();
 
 		for (String alias : aliases) {
-			if (alias.contains(" ")) {
-				multiWord.add(alias);
-				continue;
-			}
-			singleWord.add(alias);
+			if (alias.contains(" ")) multiWord.add(alias);
+			else singleWord.add(alias);
 		}
 
 		return new AliasGroups(singleWord, multiWord);
@@ -199,6 +238,27 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 
 	private List<String> splitAlias(String alias) {
 		return List.of(alias.trim().split("\\s+"));
+	}
+
+	/**
+	 * Group multi-word aliases by their prefix (all tokens except the last token),
+	 * and collect the last token as a suffix alias.
+	 */
+	private Map<List<String>, List<String>> groupByPrefix(List<String> multiWordAliases) {
+		Map<List<String>, List<String>> grouped = new LinkedHashMap<>();
+
+		for (String alias : multiWordAliases) {
+			List<String> parts = splitAlias(alias);
+			if (parts.size() < 2) continue;
+
+			List<String> prefix = List.copyOf(parts.subList(0, parts.size() - 1));
+			String suffix = parts.get(parts.size() - 1);
+			if (suffix.isBlank()) continue;
+
+			grouped.computeIfAbsent(prefix, k -> new ArrayList<>()).add(suffix);
+		}
+
+		return grouped;
 	}
 
 	private Map<String, CommandComponent<S>> indexArgumentComponents(Command<S> parsedCommand) {
@@ -226,6 +286,7 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 			if (!required && !optional) continue;
 
 			String cleaned = token.substring(1, token.length() - 1).trim();
+
 			boolean greedy = cleaned.endsWith("...");
 			if (greedy) cleaned = cleaned.substring(0, cleaned.length() - 3);
 
@@ -239,11 +300,14 @@ public final class AnnotationCommandRegistrar<S> implements CommandRegistrar<S> 
 	private List<String> sanitizeAliases(@Nullable List<String> aliases) {
 		if (aliases == null || aliases.isEmpty()) return Collections.emptyList();
 
-		return aliases.stream()
-				.filter(Objects::nonNull)
-				.map(String::trim)
-				.filter(a -> !a.isEmpty())
-				.toList();
+		LinkedHashSet<String> out = new LinkedHashSet<>();
+		for (String alias : aliases) {
+			if (alias == null) continue;
+			String trimmed = alias.trim();
+			if (trimmed.isEmpty()) continue;
+			out.add(trimmed);
+		}
+		return new ArrayList<>(out);
 	}
 
 	private Command.Builder<S> applyMetadata(

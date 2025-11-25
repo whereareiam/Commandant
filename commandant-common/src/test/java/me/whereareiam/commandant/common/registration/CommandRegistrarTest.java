@@ -355,6 +355,64 @@ class AnnotationCommandRegistrarTest {
 		assertThrows(IllegalArgumentException.class, () -> registrar.register(new NoAliasCommands()));
 	}
 
+	@Test
+	void registersMultiWordAliasesWithCommonPrefix_asSingleCommand() {
+		definitions.put("database-download", CommandDefinition.builder()
+				.aliases(List.of("database download", "database d"))
+				.permission("intercept.database.download")
+				.description("Download translations")
+				.usage("{command} {alias}")
+				.build());
+
+		registrar.register(new DatabaseDownloadCommands());
+
+		// Should register only one command, not two separate commands
+		Collection<Command<TestCommandSender>> commands = commandManager.commands();
+		assertEquals(1, commands.size(), "Expected exactly 1 command, got: " + commands.size());
+
+		Command<TestCommandSender> command = commands.iterator().next();
+		assertEquals(List.of("intercept", "database", "download"), literalNames(command));
+
+		// Verify that "d" is registered as an alias of "download"
+		CommandComponent<TestCommandSender> downloadLiteral = nthLiteral(command, 2); // intercept + database + download
+		Set<String> allAliases = new HashSet<>();
+		allAliases.add(downloadLiteral.name());
+		allAliases.addAll(downloadLiteral.alternativeAliases());
+
+		assertEquals(Set.of("download", "d"), allAliases, "Expected 'download' and 'd' as aliases");
+		assertEquals("intercept.database.download", command.commandPermission().permissionString());
+		assertEquals("Download translations", command.commandDescription().description().textDescription());
+	}
+
+	@Test
+	void registersMultiWordAliasesWithCommonPrefix_standalone() {
+		CommandRegistrar<TestCommandSender> standalone = newRegistrar(null);
+
+		definitions.put("user-manage", CommandDefinition.builder()
+				.aliases(List.of("user add", "user a", "user create"))
+				.permission("app.user.manage")
+				.description("Manage users")
+				.usage("{alias} <name>")
+				.build());
+
+		standalone.register(new UserManageCommands());
+
+		// Should register only one command, not three separate commands
+		Collection<Command<TestCommandSender>> commands = commandManager.commands();
+		assertEquals(1, commands.size(), "Expected exactly 1 command, got: " + commands.size());
+
+		Command<TestCommandSender> command = commands.iterator().next();
+		assertEquals(List.of("user", "add"), literalNames(command));
+
+		// Verify that "a" and "create" are registered as aliases of "add"
+		CommandComponent<TestCommandSender> addLiteral = nthLiteral(command, 1); // user + add
+		Set<String> allAliases = new HashSet<>();
+		allAliases.add(addLiteral.name());
+		allAliases.addAll(addLiteral.alternativeAliases());
+
+		assertEquals(Set.of("add", "a", "create"), allAliases, "Expected 'add', 'a', and 'create' as aliases");
+	}
+
 	/* ---------------- Containers ---------------- */
 
 	private static final class HelpCommands {
@@ -473,6 +531,18 @@ class AnnotationCommandRegistrarTest {
 		@Definition("no-alias")
 		@org.incendo.cloud.annotations.Command("test")
 		public void test(TestCommandSender sender) {}
+	}
+
+	private static final class DatabaseDownloadCommands {
+		@Definition("database-download")
+		@org.incendo.cloud.annotations.Command("database download")
+		public void download(TestCommandSender sender) {}
+	}
+
+	private static final class UserManageCommands {
+		@Definition("user-manage")
+		@org.incendo.cloud.annotations.Command("user add <name>")
+		public void userAdd(TestCommandSender sender, @Argument("name") String name) {}
 	}
 
 	/* ---------------- Sender ---------------- */
