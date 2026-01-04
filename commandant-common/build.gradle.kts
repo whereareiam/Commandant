@@ -5,19 +5,6 @@ dependencies {
     "compileOnly"(libs.cloud.cooldowns)
     "compileOnly"(libs.cloud.minecraft.extras)
     "compileOnly"(libs.cloud.annotations)
-
-    // Testing
-    "testImplementation"(libs.junit.jupiter)
-    "testRuntimeOnly"(libs.junit.platform)
-    "testImplementation"(libs.mockito.core)
-    "testImplementation"(libs.mockito.junit)
-    "testImplementation"(libs.cloud.core)
-    "testImplementation"(libs.cloud.cooldowns)
-    "testImplementation"(libs.cloud.annotations)
-}
-
-tasks.test {
-    useJUnitPlatform()
 }
 
 publishing {

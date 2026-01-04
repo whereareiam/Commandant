@@ -3,6 +3,20 @@ dependencies {
     implementation(project(":commandant-common"))
 
     compileOnly(libs.cloud.annotations)
+
+    // Testing
+    testRuntimeOnly(libs.junit.platform)
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.mockito.junit)
+    testImplementation(libs.cloud.core)
+    testImplementation(libs.cloud.cooldowns)
+    testImplementation(libs.cloud.annotations)
+    testImplementation(libs.jetbrains.annotations)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 publishing {

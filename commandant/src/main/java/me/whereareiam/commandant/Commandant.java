@@ -1,110 +1,185 @@
 package me.whereareiam.commandant;
 
-import me.whereareiam.commandant.common.CommandExceptionHandler;
-import me.whereareiam.commandant.common.registration.AnnotationCommandRegistrar;
-import me.whereareiam.commandant.common.registration.CommandDefinitionRegistration;
-import me.whereareiam.commandant.model.CommandDefinition;
-import me.whereareiam.commandant.model.message.ExceptionMessages;
-import me.whereareiam.commandant.registration.CommandRegistrar;
-import me.whereareiam.keystone.Actor;
-import me.whereareiam.keystone.serializer.SerializerEngine;
+import me.whereareiam.commandant.adapter.DefinitionAdapter;
+import me.whereareiam.commandant.common.parsing.DefinitionParser;
+import org.incendo.cloud.Command;
 import org.incendo.cloud.CommandManager;
-import org.incendo.cloud.minecraft.extras.AudienceProvider;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Map;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
-import java.util.function.Function;
+import java.util.function.Consumer;
 
 /**
- * Factory class for creating CommandRegistrar instances and registration helpers.
- * This is the entry point for programmatic command registration.
+ * Helper library for applying definition-based configuration to Cloud commands.
+ * <p>
+ * Commandant provides utilities for processing already-parsed commands and applying
+ * definition-based overrides (aliases, permissions, descriptions, cooldowns, etc.).
+ * <p>
+ * Typical usage with custom annotation parser:
+ * <pre>{@code
+ * // 1. Parse commands with your custom annotation parser
+ * Collection<Command<Player>> commands = myAnnotationParser.parse(new HelpCommand());
+ *
+ * // 2. Process each command with definition overrides
+ * for (Command<Player> cmd : commands) {
+ *     String defId = extractDefinitionId(cmd);
+ *     MyDefinition definition = lookupDefinition(defId);
+ *
+ *     Commandant.process(cmd, commandManager)
+ *         .withDefinition(definition, adapter)
+ *         .modify(builder -> {
+ *             // Add custom metadata
+ *             builder.meta(MY_KEY, value);
+ *         })
+ *         .register();
+ * }
+ * }</pre>
  */
-@SuppressWarnings("unused")
 public final class Commandant {
 	/**
-	 * Creates a command key extractor that matches Command instances to config keys
-	 * by comparing their CommandDefinition properties.
+	 * Process a single parsed command with optional definition-based overrides.
+	 * <p>
+	 * This is useful when using custom annotation parsers. Parse your commands first,
+	 * then process each one with this method to apply definition overrides.
 	 *
-	 * @param commandDefinitions Map of command keys to their CommandDefinition configs
-	 * @param <S>                The sender type
-	 * @return A function that extracts the command key from a Command instance
+	 * @param command        the parsed command
+	 * @param commandManager the Cloud command manager
+	 * @param <S>            sender type
+	 * @return command processor for fluent API
 	 */
 	@NotNull
-	public static <S> Function<Command<S>, String> createDefinitionMatcher(
-			@NotNull Map<String, CommandDefinition> commandDefinitions
+	public static <S> CommandProcessor<S> process(
+			@NotNull Command<S> command,
+			@NotNull CommandManager<S> commandManager
 	) {
-		return command -> {
-			CommandDefinition commandDef = command.getDefinition();
-			return commandDefinitions.entrySet().stream()
-					.filter(entry -> definitionsMatch(entry.getValue(), commandDef))
-					.map(Map.Entry::getKey)
-					.findFirst()
+		return new CommandProcessor<>(command, commandManager);
+	}
+
+	/**
+	 * Processor for individual commands with optional definition overrides.
+	 */
+	public static final class CommandProcessor<S> {
+		private final Command<S> command;
+		private final CommandManager<S> commandManager;
+
+		CommandProcessor(
+				@NotNull Command<S> command,
+				@NotNull CommandManager<S> commandManager
+		) {
+			this.command = Objects.requireNonNull(command, "command");
+			this.commandManager = Objects.requireNonNull(commandManager, "commandManager");
+		}
+
+		/**
+		 * Apply definition-based overrides to this command.
+		 * <p>
+		 * If the definition is null or the command has no definition ID metadata,
+		 * the command is registered as-is without modifications.
+		 *
+		 * @param definition the definition to apply (can be null)
+		 * @param adapter    adapter for extracting values from the definition
+		 * @param <D>        definition type
+		 * @return builder processor for fluent API
+		 */
+		@NotNull
+		public <D> BuilderProcessor<S> withDefinition(
+				@Nullable D definition,
+				@NotNull DefinitionAdapter<D> adapter
+		) {
+			Objects.requireNonNull(adapter, "adapter");
+
+			String defId = command.commandMeta()
+					.optional(CommandantKeys.DEFINITION_ID)
 					.orElse(null);
-		};
+
+			// No definition or no definition ID - register as-is
+			if (definition == null || defId == null) {
+				commandManager.command(command);
+				return new BuilderProcessor<>(List.of(), commandManager);
+			}
+
+			// Apply definition overrides
+			DefinitionParser<S, D> parser = new DefinitionParser<>(commandManager, adapter);
+			List<Command.Builder<S>> builders = parser.applyOverrides(
+					definition, defId, command, null
+			);
+
+			return new BuilderProcessor<>(builders, commandManager);
+		}
+
+		/**
+		 * Register the command without definition processing.
+		 *
+		 * @return builder processor (empty, as command was already registered)
+		 */
+		@NotNull
+		public BuilderProcessor<S> withoutDefinition() {
+			commandManager.command(command);
+			return new BuilderProcessor<>(List.of(), commandManager);
+		}
 	}
 
 	/**
-	 * Creates an {@link CommandRegistrar} that binds Cloud-annotated handlers to {@link CommandDefinition} entries.
-	 *
-	 * @param commandManager   the command manager to register commands with
-	 * @param cooldownResolver function to resolve cooldown keys from senders
-	 * @param senderType       sender class
-	 * @param definitionLookup lookup for definition ids
-	 * @param <S>              sender type
-	 * @return registrar
+	 * Processor for command builders, allowing modification before registration.
 	 */
-	@NotNull
-	public static <S> CommandRegistrar<S> createAnnotationRegistrar(
-			@NotNull CommandManager<S> commandManager,
-			@NotNull Function<S, UUID> cooldownResolver,
-			@NotNull Class<S> senderType,
-			@NotNull Function<String, CommandDefinition> definitionLookup
-	) {
-		CommandDefinitionRegistration<S> registration = new CommandDefinitionRegistration<>(
-				commandManager
-		);
-		return new AnnotationCommandRegistrar<>(registration, senderType, definitionLookup);
-	}
+	public static final class BuilderProcessor<S> {
+		private final List<Command.Builder<S>> builders;
+		private final CommandManager<S> commandManager;
 
-	/**
-	 * Creates and registers a CommandExceptionHandler with the given command manager.
-	 *
-	 * @param exceptionMessages The exception message configuration
-	 * @param serializer        The serializer engine to use for formatting command exception messages
-	 * @param commandManager    The command manager to registration handlers with
-	 * @param audienceProvider  Provider to convert the sender to an Audience
-	 * @param <S>               The sender type (must extend Actor)
-	 */
-	public static <S extends Actor> void registerExceptionHandler(
-			@NotNull ExceptionMessages exceptionMessages,
-			@NotNull SerializerEngine serializer,
-			@NotNull CommandManager<S> commandManager,
-			@NotNull AudienceProvider<S> audienceProvider
-	) {
-		CommandExceptionHandler.register(exceptionMessages, serializer, commandManager, audienceProvider);
-	}
+		BuilderProcessor(
+				@NotNull List<Command.Builder<S>> builders,
+				@NotNull CommandManager<S> commandManager
+		) {
+			this.builders = Objects.requireNonNull(builders, "builders");
+			this.commandManager = Objects.requireNonNull(commandManager, "commandManager");
+		}
 
-	/**
-	 * Compares two CommandDefinition instances to check if they match.
-	 *
-	 * @param def1 First definition
-	 * @param def2 Second definition
-	 * @return true if the definitions match
-	 */
-	private static boolean definitionsMatch(
-			@Nullable CommandDefinition def1,
-			@Nullable CommandDefinition def2
-	) {
-		if (def1 == def2) return true;
-		if (def1 == null || def2 == null) return false;
+		/**
+		 * Modify all builders before registration.
+		 * <p>
+		 * The consumer is called once for each builder. This is useful for
+		 * adding custom metadata or modifying command properties.
+		 *
+		 * @param modifier consumer that modifies builders
+		 * @return this processor for chaining
+		 */
+		@NotNull
+		public BuilderProcessor<S> modify(@NotNull Consumer<Command.Builder<S>> modifier) {
+			Objects.requireNonNull(modifier, "modifier");
+			builders.forEach(modifier);
+			return this;
+		}
 
-		// Compare key properties
-		return Objects.equals(def1.getAliases(), def2.getAliases())
-				&& def1.isEnabled() == def2.isEnabled()
-				&& Objects.equals(def1.getPermission(), def2.getPermission())
-				&& Objects.equals(def1.getDescription(), def2.getDescription());
+		/**
+		 * Access the command builders for custom processing.
+		 *
+		 * @return unmodifiable list of builders
+		 */
+		@NotNull
+		public List<Command.Builder<S>> builders() {
+			return Collections.unmodifiableList(builders);
+		}
+
+		/**
+		 * Build and register all commands to the command manager.
+		 */
+		public void register() {
+			builders.forEach(builder -> commandManager.command(builder.build()));
+		}
+
+		/**
+		 * Build all commands without registering them.
+		 *
+		 * @return list of built commands
+		 */
+		@NotNull
+		public List<Command<S>> build() {
+			return builders.stream()
+					.map(Command.Builder::build)
+					.toList();
+		}
 	}
 }

@@ -1,16 +1,14 @@
 package me.whereareiam.commandant.annotation;
 
-import me.whereareiam.commandant.model.CommandDefinition;
-
 import java.lang.annotation.*;
 
 /**
  * Associates a Cloud-annotated command container or handler method with a
- * {@link CommandDefinition Definition} entry.
+ * definition entry provided by the platform.
  * <p>
- * The {@link #value()} should match the key inside the configuration map (e.g., {@code "help"},
- * {@code "reload"}). When the annotation is present on both the class and the method, the method-level
- * value takes precedence.
+ * The {@link #value()} should match the key in the platform's definition lookup
+ * (e.g., {@code "help"}, {@code "reload"}). When the annotation is present on both
+ * the class and the method, the method-level value takes precedence.
  */
 @Documented
 @Inherited
@@ -18,9 +16,9 @@ import java.lang.annotation.*;
 @Target({ElementType.TYPE, ElementType.METHOD})
 public @interface Definition {
 	/**
-	 * Identifier of the definition inside the configuration.
+	 * Identifier of the definition in the platform's configuration.
 	 *
-	 * @return definition identifier (e.g., {@code "main"})
+	 * @return definition identifier (e.g., {@code "main"}, {@code "help"})
 	 */
 	String value();
 }
