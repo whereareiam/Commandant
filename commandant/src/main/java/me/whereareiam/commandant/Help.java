@@ -4,133 +4,102 @@ import me.whereareiam.commandant.builder.HelpBuilder;
 import me.whereareiam.commandant.builder.PaginationBuilder;
 import me.whereareiam.commandant.common.DefaultHelpBuilder;
 import me.whereareiam.commandant.model.message.HelpMessages;
+import me.whereareiam.commandant.model.message.PaginationMessages;
+import me.whereareiam.keystone.model.SerializerOptions;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 
 /**
- * Static helper for creating HelpBuilder instances.
- * Provides a clean API for help command functionality.
+ * Fluent helper for creating HelpBuilder instances.
  */
 @SuppressWarnings("unused")
 public final class Help {
 	/**
-	 * Creates a HelpBuilder with the given configuration, using the commands per page defined in {@link HelpMessages}.
-	 *
-	 * @param helpMessages        The help message configuration
-	 * @param customArgumentNames Optional map of argument names to custom display names
-	 * @param paginationBuilder   Optional pagination builder for multi-page help
-	 * @param <S>                 The sender type
-	 * @return A new HelpBuilder instance
-	 */
-	@NotNull
-	public static <S> HelpBuilder<S> create(
-			@NotNull HelpMessages helpMessages,
-			@Nullable Map<String, String> customArgumentNames,
-			@Nullable PaginationBuilder paginationBuilder
-	) {
-		return create(helpMessages, customArgumentNames, paginationBuilder, helpMessages.getCommandsPerPage());
-	}
-
-	/**
-	 * Creates a HelpBuilder without pagination, using the commands per page defined in {@link HelpMessages}.
-	 *
-	 * @param helpMessages        The help message configuration
-	 * @param customArgumentNames Optional map of argument names to custom display names
-	 * @param <S>                 The sender type
-	 * @return A new HelpBuilder instance
-	 */
-	@NotNull
-	public static <S> HelpBuilder<S> create(
-			@NotNull HelpMessages helpMessages,
-			@Nullable Map<String, String> customArgumentNames
-	) {
-		return create(helpMessages, customArgumentNames, null, helpMessages.getCommandsPerPage());
-	}
-
-	/**
-	 * Creates a HelpBuilder with minimal configuration, using the commands per page defined in {@link HelpMessages}.
+	 * Creates a fluent builder for HelpBuilder configuration.
 	 *
 	 * @param helpMessages The help message configuration
 	 * @param <S>          The sender type
-	 * @return A new HelpBuilder instance
+	 * @return A new Help builder
 	 */
 	@NotNull
-	public static <S> HelpBuilder<S> create(@NotNull HelpMessages helpMessages) {
-		return create(helpMessages, null, null, helpMessages.getCommandsPerPage());
+	public static <S> Builder<S> builder(@NotNull HelpMessages helpMessages) {
+		return new Builder<>(helpMessages);
 	}
 
 	/**
-	 * Creates a HelpBuilder with the given configuration.
+	 * Fluent builder for HelpBuilder configuration.
 	 *
-	 * @param helpMessages        The help message configuration
-	 * @param customArgumentNames Optional map of argument names to custom display names
-	 * @param paginationBuilder   Optional pagination builder for multi-page help
-	 * @param itemsPerPage        Number of commands to display per page
-	 * @param <S>                 The sender type
-	 * @return A new HelpBuilder instance
+	 * @param <S> The sender type
 	 */
-	@NotNull
-	public static <S> HelpBuilder<S> create(
-			@NotNull HelpMessages helpMessages,
-			@Nullable Map<String, String> customArgumentNames,
-			@Nullable PaginationBuilder paginationBuilder,
-			int itemsPerPage
-	) {
-		return create(helpMessages, customArgumentNames, paginationBuilder, itemsPerPage, false);
-	}
+	public static final class Builder<S> {
+		private final HelpMessages helpMessages;
+		private Map<String, String> customArgumentNames;
+		private PaginationBuilder paginationBuilder;
+		private PaginationMessages paginationMessages;
+		private int itemsPerPage;
+		private boolean sortAlphabetically;
+		private SerializerOptions.PlaceholderFormat placeholderFormat = SerializerOptions.PlaceholderFormat.CURLY_BRACES;
 
-	/**
-	 * Creates a HelpBuilder with the given configuration.
-	 *
-	 * @param helpMessages        The help message configuration
-	 * @param customArgumentNames Optional map of argument names to custom display names
-	 * @param paginationBuilder   Optional pagination builder for multi-page help
-	 * @param itemsPerPage        Number of commands to display per page
-	 * @param sortAlphabetically  Whether to sort commands alphabetically by name
-	 * @param <S>                 The sender type
-	 * @return A new HelpBuilder instance
-	 */
-	@NotNull
-	public static <S> HelpBuilder<S> create(
-			@NotNull HelpMessages helpMessages,
-			@Nullable Map<String, String> customArgumentNames,
-			@Nullable PaginationBuilder paginationBuilder,
-			int itemsPerPage,
-			boolean sortAlphabetically
-	) {
-		return new DefaultHelpBuilder<>(helpMessages, customArgumentNames, paginationBuilder, itemsPerPage, sortAlphabetically);
-	}
+		private Builder(@NotNull HelpMessages helpMessages) {
+			this.helpMessages = helpMessages;
+			this.itemsPerPage = helpMessages.getCommandsPerPage();
+		}
 
-	/**
-	 * Creates a HelpBuilder without pagination.
-	 *
-	 * @param helpMessages        The help message configuration
-	 * @param customArgumentNames Optional map of argument names to custom display names
-	 * @param itemsPerPage        Number of commands to display per page
-	 * @param <S>                 The sender type
-	 * @return A new HelpBuilder instance
-	 */
-	@NotNull
-	public static <S> HelpBuilder<S> create(
-			@NotNull HelpMessages helpMessages,
-			@Nullable Map<String, String> customArgumentNames,
-			int itemsPerPage
-	) {
-		return create(helpMessages, customArgumentNames, null, itemsPerPage, false);
-	}
+		@NotNull
+		public Builder<S> customArgumentNames(@Nullable Map<String, String> customArgumentNames) {
+			this.customArgumentNames = customArgumentNames;
+			return this;
+		}
 
-	/**
-	 * Creates a HelpBuilder with minimal configuration.
-	 *
-	 * @param helpMessages The help message configuration
-	 * @param itemsPerPage Number of commands to display per page
-	 * @param <S>          The sender type
-	 * @return A new HelpBuilder instance
-	 */
-	@NotNull
-	public static <S> HelpBuilder<S> create(@NotNull HelpMessages helpMessages, int itemsPerPage) {
-		return create(helpMessages, null, null, itemsPerPage, false);
+		@NotNull
+		public Builder<S> paginationBuilder(@Nullable PaginationBuilder paginationBuilder) {
+			this.paginationBuilder = paginationBuilder;
+			return this;
+		}
+
+		@NotNull
+		public Builder<S> paginationMessages(@Nullable PaginationMessages paginationMessages) {
+			this.paginationMessages = paginationMessages;
+			return this;
+		}
+
+		@NotNull
+		public Builder<S> itemsPerPage(int itemsPerPage) {
+			this.itemsPerPage = itemsPerPage;
+			return this;
+		}
+
+		@NotNull
+		public Builder<S> sortAlphabetically(boolean sortAlphabetically) {
+			this.sortAlphabetically = sortAlphabetically;
+			return this;
+		}
+
+		@NotNull
+		public Builder<S> placeholderFormat(@NotNull SerializerOptions.PlaceholderFormat placeholderFormat) {
+			this.placeholderFormat = placeholderFormat;
+			return this;
+		}
+
+		@NotNull
+		public HelpBuilder<S> build() {
+			PaginationBuilder resolvedPaginationBuilder = paginationBuilder;
+			if (resolvedPaginationBuilder == null && paginationMessages != null) {
+				resolvedPaginationBuilder = Pagination.builder(paginationMessages)
+						.placeholderFormat(placeholderFormat)
+						.build();
+			}
+
+			return new DefaultHelpBuilder<>(
+					helpMessages,
+					customArgumentNames,
+					resolvedPaginationBuilder,
+					itemsPerPage,
+					sortAlphabetically,
+					placeholderFormat
+			);
+		}
 	}
 }

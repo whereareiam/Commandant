@@ -3,6 +3,7 @@ package me.whereareiam.commandant.common;
 import me.whereareiam.commandant.builder.HelpBuilder;
 import me.whereareiam.commandant.builder.PaginationBuilder;
 import me.whereareiam.commandant.model.message.HelpMessages;
+import me.whereareiam.keystone.model.SerializerOptions;
 import org.incendo.cloud.Command;
 import org.incendo.cloud.component.CommandComponent;
 import org.jetbrains.annotations.NotNull;
@@ -40,6 +41,7 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 	private final PaginationBuilder paginationBuilder;
 	private final int itemsPerPage;
 	private final boolean sortAlphabetically;
+	private final SerializerOptions.PlaceholderFormat placeholderFormat;
 
 	/**
 	 * Creates a new DefaultHelpBuilder with the given configuration.
@@ -57,11 +59,24 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 			int itemsPerPage,
 			boolean sortAlphabetically
 	) {
+		this(messages, customArgumentNames, paginationBuilder, itemsPerPage, sortAlphabetically,
+				SerializerOptions.PlaceholderFormat.CURLY_BRACES);
+	}
+
+	public DefaultHelpBuilder(
+			@NotNull HelpMessages messages,
+			@Nullable Map<String, String> customArgumentNames,
+			@Nullable PaginationBuilder paginationBuilder,
+			int itemsPerPage,
+			boolean sortAlphabetically,
+			@NotNull SerializerOptions.PlaceholderFormat placeholderFormat
+	) {
 		this.messages = messages;
 		this.customArgumentNames = customArgumentNames != null ? customArgumentNames : Map.of();
 		this.paginationBuilder = paginationBuilder;
 		this.itemsPerPage = itemsPerPage;
 		this.sortAlphabetically = sortAlphabetically;
+		this.placeholderFormat = placeholderFormat;
 	}
 
 	@Override
@@ -69,13 +84,13 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 	public String build(@NotNull Collection<Command<S>> commands, int page) {
 		String message = String.join("\n", messages.getFormat());
 
-		if (message.contains("{commands}"))
+		if (message.contains(token("commands")))
 			message = buildCommandList(commands, message, page, itemsPerPage);
 
-		if (message.contains("{pagination}") && paginationBuilder != null)
+		if (message.contains(token("pagination")) && paginationBuilder != null)
 			message = paginationBuilder.build(message, commands.size(), page, itemsPerPage);
 		else
-			message = message.replace("{pagination}", "");
+			message = replaceToken(message, "pagination", "");
 
 		return message;
 	}
@@ -87,7 +102,7 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 	 * @param message      The message template
 	 * @param page         Current page number
 	 * @param itemsPerPage Number of items per page
-	 * @return Message with {commands} placeholder replaced
+	 * @return Message with <commands> placeholder replaced
 	 */
 	@NotNull
 	private String buildCommandList(
@@ -97,7 +112,7 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 			int itemsPerPage
 	) {
 		if (commands.isEmpty())
-			return message.replace("{commands}", messages.getNoCommands());
+			return replaceToken(message, "commands", messages.getNoCommands());
 
 		long skip = (long) (page - 1) * itemsPerPage;
 
@@ -114,7 +129,7 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 				.collect(Collectors.toList());
 
 		String commandsString = String.join("\n", commandDescriptions);
-		return message.replace("{commands}", commandsString);
+		return replaceToken(message, "commands", commandsString);
 	}
 
 	/**
@@ -129,10 +144,15 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 		String arguments = formatCommandArguments(command.nonFlagArguments());
 		String description = command.commandDescription().description().textDescription();
 
-		return messages.getCommandFormat()
-				.replace("{command}", commandName)
-				.replace("{arguments}", arguments)
-				.replace("{description}", description);
+		return replaceToken(
+				replaceToken(
+						replaceToken(messages.getCommandFormat(), "command", commandName),
+						"arguments",
+						arguments
+				),
+				"description",
+				description
+		);
 	}
 
 	/**
@@ -177,10 +197,20 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 				: argument.name();
 
 		return switch (type) {
-			case REQUIRED_VARIABLE -> format.getArgument().replace("{argument}", argumentName);
-			case OPTIONAL_VARIABLE -> format.getOptionalArgument().replace("{argument}", argumentName);
+			case REQUIRED_VARIABLE -> replaceToken(format.getArgument(), "argument", argumentName);
+			case OPTIONAL_VARIABLE -> replaceToken(format.getOptionalArgument(), "argument", argumentName);
 			default -> argumentName;
 		};
+	}
+
+	@NotNull
+	private String token(@NotNull String placeholder) {
+		return placeholderFormat.format(placeholder);
+	}
+
+	@NotNull
+	private String replaceToken(@NotNull String message, @NotNull String placeholder, @NotNull String value) {
+		return message.replace(token(placeholder), value);
 	}
 
 	@NotNull

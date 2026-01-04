@@ -2,6 +2,7 @@ package me.whereareiam.commandant.common;
 
 import me.whereareiam.commandant.builder.PaginationBuilder;
 import me.whereareiam.commandant.model.message.PaginationMessages;
+import me.whereareiam.keystone.model.SerializerOptions;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -16,13 +17,14 @@ import org.jetbrains.annotations.NotNull;
  * PaginationMessages config = ...; // from your config
  * PaginationBuilder builder = new DefaultPaginationBuilder(config);
  *
- * String message = "Header\n{commands}\n{pagination}";
+ * String message = "Header\n<commands>\n<pagination>";
  * String result = builder.build(message, 25, 2, 10);
- * // Result: "Header\n{commands}\n← Page 2/3 →"
+ * // Result: "Header\n<commands>\n← Page 2/3 →"
  * }</pre>
  */
 public class DefaultPaginationBuilder implements PaginationBuilder {
 	private final PaginationMessages messages;
+	private final SerializerOptions.PlaceholderFormat placeholderFormat;
 
 	/**
 	 * Creates a new DefaultPaginationBuilder with the given configuration.
@@ -30,7 +32,15 @@ public class DefaultPaginationBuilder implements PaginationBuilder {
 	 * @param messages The pagination message configuration
 	 */
 	public DefaultPaginationBuilder(@NotNull PaginationMessages messages) {
+		this(messages, SerializerOptions.PlaceholderFormat.CURLY_BRACES);
+	}
+
+	public DefaultPaginationBuilder(
+			@NotNull PaginationMessages messages,
+			@NotNull SerializerOptions.PlaceholderFormat placeholderFormat
+	) {
 		this.messages = messages;
+		this.placeholderFormat = placeholderFormat;
 	}
 
 	@Override
@@ -39,11 +49,11 @@ public class DefaultPaginationBuilder implements PaginationBuilder {
 		int totalPages = (int) Math.ceil((double) totalItems / itemsPerPage);
 
 		if (totalPages <= 1 && !messages.isShowPaginationIfOnePage()) {
-			return message.replace("{pagination}", "");
+			return replaceToken(message, "pagination", "");
 		}
 
 		String pagination = formatPagination(currentPage, totalPages);
-		return message.replace("{pagination}", pagination);
+		return replaceToken(message, "pagination", pagination);
 	}
 
 	/**
@@ -58,11 +68,19 @@ public class DefaultPaginationBuilder implements PaginationBuilder {
 		String previousLink = buildPreviousLink(currentPage);
 		String nextLink = buildNextLink(currentPage, totalPages);
 
-		return messages.getFormat()
-				.replace("{previous}", previousLink)
-				.replace("{next}", nextLink)
-				.replace("{current}", String.valueOf(currentPage))
-				.replace("{max}", String.valueOf(totalPages));
+		return replaceToken(
+				replaceToken(
+						replaceToken(
+								replaceToken(messages.getFormat(), "previous", previousLink),
+								"next",
+								nextLink
+						),
+						"current",
+						String.valueOf(currentPage)
+				),
+				"max",
+				String.valueOf(totalPages)
+		);
 	}
 
 	/**
@@ -74,12 +92,15 @@ public class DefaultPaginationBuilder implements PaginationBuilder {
 	@NotNull
 	private String buildPreviousLink(int currentPage) {
 		if (currentPage > 1) {
-			return messages.getPreviousTagFormat()
-					.replace("{previousPage}", String.valueOf(currentPage - 1));
+			return replaceToken(
+					messages.getPreviousTagFormat(),
+					"previousPage",
+					String.valueOf(currentPage - 1)
+			);
 		}
 
 		return messages.isShowPreviousEvenIfFirst()
-				? messages.getPreviousTagFormat().replace("{previousPage}", "1")
+				? replaceToken(messages.getPreviousTagFormat(), "previousPage", "1")
 				: "";
 	}
 
@@ -93,13 +114,22 @@ public class DefaultPaginationBuilder implements PaginationBuilder {
 	@NotNull
 	private String buildNextLink(int currentPage, int totalPages) {
 		if (currentPage < totalPages) {
-			return messages.getNextTagFormat()
-					.replace("{nextPage}", String.valueOf(currentPage + 1));
+			return replaceToken(
+					messages.getNextTagFormat(),
+					"nextPage",
+					String.valueOf(currentPage + 1)
+			);
 		}
 
 		return messages.isShowNextEvenIfLast()
-				? messages.getNextTagFormat().replace("{nextPage}", String.valueOf(totalPages))
+				? replaceToken(messages.getNextTagFormat(), "nextPage", String.valueOf(totalPages))
 				: "";
 	}
+
+	@NotNull
+	private String replaceToken(@NotNull String message, @NotNull String placeholder, @NotNull String value) {
+		return message.replace(placeholderFormat.format(placeholder), value);
+	}
 }
+
 

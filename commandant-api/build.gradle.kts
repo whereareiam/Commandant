@@ -1,5 +1,6 @@
 dependencies {
     compileOnly(libs.cloud.core)
+    api(libs.keystone)
 }
 
 publishing {

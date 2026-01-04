@@ -19,13 +19,13 @@ public class PaginationMessages {
 
 	/**
 	 * Format template for pagination display.
-	 * Placeholders:
-	 * - {previous}: Previous page navigation
-	 * - {next}: Next page navigation
-	 * - {current}: Current page number
-	 * - {max}: Total number of pages
+	 * Placeholders (format defined by caller):
+	 * - previous: Previous page navigation
+	 * - next: Next page navigation
+	 * - current: Current page number
+	 * - max: Total number of pages
 	 * <p>
-	 * Example: "{previous} <gray>Page {current}/{max}</gray> {next}"
+	 * Example: "<previous> <gray>Page <current>/<max></gray> <next>"
 	 */
 	private String format;
 
@@ -36,9 +36,9 @@ public class PaginationMessages {
 
 	/**
 	 * Format template for previous page button.
-	 * Placeholder: {previousPage} - the previous page number
+	 * Placeholder: previousPage - the previous page number
 	 * <p>
-	 * Example: "<hover:show_text:'Go to page {previousPage}'><click:run_command:'/help {previousPage}'><gold>←</gold></click></hover>"
+	 * Example: "<hover:show_text:'Go to page <previousPage>'><click:run_command:'/help <previousPage>'><gold>←</gold></click></hover>"
 	 */
 	private String previousTagFormat;
 
@@ -49,9 +49,9 @@ public class PaginationMessages {
 
 	/**
 	 * Format template for next page button.
-	 * Placeholder: {nextPage} - the next page number
+	 * Placeholder: nextPage - the next page number
 	 * <p>
-	 * Example: "<hover:show_text:'Go to page {nextPage}'><click:run_command:'/help {nextPage}'><gold>→</gold></click></hover>"
+	 * Example: "<hover:show_text:'Go to page <nextPage>'><click:run_command:'/help <nextPage>'><gold>→</gold></click></hover>"
 	 */
 	private String nextTagFormat;
 }
