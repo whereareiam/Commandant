@@ -1,5 +1,6 @@
 package me.whereareiam.commandant.common;
 
+import me.whereareiam.commandant.CommandantKeys;
 import me.whereareiam.commandant.builder.HelpBuilder;
 import me.whereareiam.commandant.builder.PaginationBuilder;
 import me.whereareiam.commandant.model.message.HelpMessages;
@@ -9,9 +10,7 @@ import org.incendo.cloud.component.CommandComponent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -41,6 +40,7 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 	private final PaginationBuilder paginationBuilder;
 	private final int itemsPerPage;
 	private final boolean sortAlphabetically;
+	private final boolean dedupeByDefinitionId;
 	private final SerializerOptions.PlaceholderFormat placeholderFormat;
 
 	/**
@@ -59,7 +59,7 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 			int itemsPerPage,
 			boolean sortAlphabetically
 	) {
-		this(messages, customArgumentNames, paginationBuilder, itemsPerPage, sortAlphabetically,
+		this(messages, customArgumentNames, paginationBuilder, itemsPerPage, sortAlphabetically, false,
 				SerializerOptions.PlaceholderFormat.CURLY_BRACES);
 	}
 
@@ -69,6 +69,7 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 			@Nullable PaginationBuilder paginationBuilder,
 			int itemsPerPage,
 			boolean sortAlphabetically,
+			boolean dedupeByDefinitionId,
 			@NotNull SerializerOptions.PlaceholderFormat placeholderFormat
 	) {
 		this.messages = messages;
@@ -76,6 +77,7 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 		this.paginationBuilder = paginationBuilder;
 		this.itemsPerPage = itemsPerPage;
 		this.sortAlphabetically = sortAlphabetically;
+		this.dedupeByDefinitionId = dedupeByDefinitionId;
 		this.placeholderFormat = placeholderFormat;
 	}
 
@@ -114,9 +116,13 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 		if (commands.isEmpty())
 			return replaceToken(message, "commands", messages.getNoCommands());
 
+		Collection<Command<S>> resolvedCommands = dedupeByDefinitionId
+				? dedupeCommands(commands)
+				: commands;
+
 		long skip = (long) (page - 1) * itemsPerPage;
 
-		var commandStream = commands.stream();
+		var commandStream = resolvedCommands.stream();
 		if (sortAlphabetically) {
 			commandStream = commandStream.sorted((c1, c2) ->
 					buildCommandKey(c1).compareToIgnoreCase(buildCommandKey(c2)));
@@ -130,6 +136,27 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 
 		String commandsString = String.join("\n", commandDescriptions);
 		return replaceToken(message, "commands", commandsString);
+	}
+
+	@NotNull
+	private Collection<Command<S>> dedupeCommands(@NotNull Collection<Command<S>> commands) {
+		List<Command<S>> result = new ArrayList<>();
+		Set<String> seen = new HashSet<>();
+
+		for (Command<S> command : commands) {
+			String definitionId = command.commandMeta()
+					.optional(CommandantKeys.DEFINITION_ID)
+					.orElse(null);
+			if (definitionId == null) {
+				result.add(command);
+				continue;
+			}
+
+			if (seen.add(definitionId))
+				result.add(command);
+		}
+
+		return result;
 	}
 
 	/**

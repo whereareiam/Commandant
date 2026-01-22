@@ -40,6 +40,7 @@ public final class Help {
 		private PaginationMessages paginationMessages;
 		private int itemsPerPage;
 		private boolean sortAlphabetically;
+		private boolean dedupeByDefinitionId;
 		private SerializerOptions.PlaceholderFormat placeholderFormat = SerializerOptions.PlaceholderFormat.CURLY_BRACES;
 
 		private Builder(@NotNull HelpMessages helpMessages) {
@@ -78,6 +79,12 @@ public final class Help {
 		}
 
 		@NotNull
+		public Builder<S> dedupeByDefinitionId(boolean dedupeByDefinitionId) {
+			this.dedupeByDefinitionId = dedupeByDefinitionId;
+			return this;
+		}
+
+		@NotNull
 		public Builder<S> placeholderFormat(@NotNull SerializerOptions.PlaceholderFormat placeholderFormat) {
 			this.placeholderFormat = placeholderFormat;
 			return this;
@@ -98,6 +105,7 @@ public final class Help {
 					resolvedPaginationBuilder,
 					itemsPerPage,
 					sortAlphabetically,
+					dedupeByDefinitionId,
 					placeholderFormat
 			);
 		}
