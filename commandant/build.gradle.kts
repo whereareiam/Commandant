@@ -1,3 +1,7 @@
+plugins {
+    id("commandant.java-common")
+}
+
 dependencies {
     api(project(":commandant-api"))
     implementation(project(":commandant-common"))
@@ -15,10 +19,6 @@ dependencies {
     testImplementation(libs.jetbrains.annotations)
 }
 
-tasks.test {
-    useJUnitPlatform()
-}
-
 publishing {
     publications {
         create<MavenPublication>("mavenJava") {
@@ -31,4 +31,3 @@ publishing {
         }
     }
 }
-

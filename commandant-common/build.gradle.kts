@@ -1,10 +1,12 @@
-dependencies {
-    "api"(project(":commandant-api"))
+plugins {
+    id("commandant.java-common")
+}
 
-    "compileOnly"(libs.cloud.core)
-    "compileOnly"(libs.cloud.cooldowns)
-    "compileOnly"(libs.cloud.minecraft.extras)
-    "compileOnly"(libs.cloud.annotations)
+dependencies {
+    api(project(":commandant-api"))
+
+    compileOnly(libs.cloud.cooldowns)
+    compileOnly(libs.cloud.annotations)
 }
 
 publishing {
@@ -19,4 +21,3 @@ publishing {
         }
     }
 }
-

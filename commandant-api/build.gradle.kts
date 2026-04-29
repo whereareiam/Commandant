@@ -1,5 +1,8 @@
+plugins {
+    id("commandant.java-common")
+}
+
 dependencies {
-    compileOnly(libs.cloud.core)
     api(libs.keystone)
 }
 
