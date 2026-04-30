@@ -142,6 +142,31 @@ class CommandantTest {
 	}
 
 	@Test
+	void testMismatchedUsageTokenFailsFast() {
+		TestDefinition definition = TestDefinition.builder()
+				.enabled(true)
+				.aliases(List.of("premium confirm"))
+				.usage("{alias} [code]")
+				.build();
+
+		Command<TestSender> command = commandManager.commandBuilder("premium")
+				.literal("confirm")
+				.optional("input", org.incendo.cloud.parser.standard.StringParser.stringParser())
+				.meta(CommandantKeys.DEFINITION_ID, "premium-confirm")
+				.handler(ctx -> {})
+				.build();
+
+		IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () ->
+				Commandant.process(command, commandManager)
+						.withDefinition(definition, new TestAdapter())
+						.build()
+		);
+
+		assertTrue(error.getMessage().contains("code"));
+		assertTrue(error.getMessage().contains("input"));
+	}
+
+	@Test
 	void testDefinitionDisabled() {
 		TestDefinition definition = TestDefinition.builder()
 				.enabled(false)

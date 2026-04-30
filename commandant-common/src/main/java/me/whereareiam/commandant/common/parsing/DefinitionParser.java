@@ -175,7 +175,12 @@ public final class DefinitionParser<S, D> {
 		
 		for (ArgumentToken token : usageTokens) {
 			CommandComponent<S> component = variableComponents.get(token.name());
-			if (component == null) continue;
+			if (component == null) {
+				throw new IllegalArgumentException(
+						"Definition usage token '%s' does not match any parsed command argument. Available arguments: %s"
+								.formatted(token.name(), variableComponents.keySet())
+				);
+			}
 
 			CommandComponent.Builder componentBuilder = createComponentBuilder(component, argumentDescriptions);
 			
