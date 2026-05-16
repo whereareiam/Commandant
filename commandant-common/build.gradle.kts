@@ -7,6 +7,10 @@ dependencies {
 
     compileOnly(libs.cloud.cooldowns)
     compileOnly(libs.cloud.annotations)
+
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.cloud.core)
+    testRuntimeOnly(libs.junit.platform)
 }
 
 publishing {

@@ -85,12 +85,15 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 	@NotNull
 	public String build(@NotNull Collection<Command<S>> commands, int page) {
 		String message = String.join("\n", messages.getFormat());
+		Collection<Command<S>> resolvedCommands = dedupeByDefinitionId
+				? dedupeCommands(commands)
+				: commands;
 
 		if (message.contains(token("commands")))
-			message = buildCommandList(commands, message, page, itemsPerPage);
+			message = buildCommandList(resolvedCommands, message, page, itemsPerPage);
 
 		if (message.contains(token("pagination")) && paginationBuilder != null)
-			message = paginationBuilder.build(message, commands.size(), page, itemsPerPage);
+			message = paginationBuilder.build(message, resolvedCommands.size(), page, itemsPerPage);
 		else
 			message = replaceToken(message, "pagination", "");
 
@@ -116,13 +119,9 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 		if (commands.isEmpty())
 			return replaceToken(message, "commands", messages.getNoCommands());
 
-		Collection<Command<S>> resolvedCommands = dedupeByDefinitionId
-				? dedupeCommands(commands)
-				: commands;
-
 		long skip = (long) (page - 1) * itemsPerPage;
 
-		var commandStream = resolvedCommands.stream();
+		var commandStream = commands.stream();
 		if (sortAlphabetically) {
 			commandStream = commandStream.sorted((c1, c2) ->
 					buildCommandKey(c1).compareToIgnoreCase(buildCommandKey(c2)));
@@ -247,4 +246,3 @@ public class DefaultHelpBuilder<S> implements HelpBuilder<S> {
 				.collect(Collectors.joining(" "));
 	}
 }
-
