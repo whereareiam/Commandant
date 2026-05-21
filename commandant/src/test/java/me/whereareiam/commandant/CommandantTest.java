@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -91,6 +92,71 @@ class CommandantTest {
 
 		// Should create builders for each alias
 		assertEquals(2, builders.size());
+	}
+
+	@Test
+	void testProcessCommandWithRootAliasesBuildsSingleRootCommand() {
+		TestDefinition definition = TestDefinition.builder()
+				.enabled(true)
+				.aliases(List.of("identica", "auth"))
+				.build();
+
+		Command<TestSender> command = commandManager.commandBuilder("original")
+				.meta(CommandantKeys.DEFINITION_ID, "main")
+				.handler(ctx -> {})
+				.build();
+
+		List<Command<TestSender>> built = Commandant.process(command, commandManager)
+				.withDefinition(definition, new TestAdapter(), List.of("identica", "auth"))
+				.build();
+
+		assertEquals(1, built.size());
+		assertEquals("identica", built.get(0).rootComponent().name());
+		assertEquals(List.of("auth"), new ArrayList<>(built.get(0).rootComponent().alternativeAliases()));
+	}
+
+	@Test
+	void testProcessSubcommandWithRootAliasesExecutesAlternativeRootAlias() {
+		AtomicInteger executions = new AtomicInteger();
+		TestDefinition definition = TestDefinition.builder()
+				.enabled(true)
+				.aliases(List.of("help"))
+				.build();
+
+		Command<TestSender> command = commandManager.commandBuilder("original")
+				.literal("help")
+				.meta(CommandantKeys.DEFINITION_ID, "help")
+				.handler(ctx -> executions.incrementAndGet())
+				.build();
+
+		Commandant.process(command, commandManager)
+				.withDefinition(definition, new TestAdapter(), List.of("identica", "auth"))
+				.register();
+
+		commandManager.commandExecutor().executeCommand(new TestSender(), "auth help").join();
+		assertEquals(1, executions.get());
+		assertEquals(List.of("identica"), new ArrayList<>(commandManager.rootCommands()));
+	}
+
+	@Test
+	void testPrefixedAliasesCollapseIntoSharedRootWhenRootAliasesProvided() {
+		TestDefinition definition = TestDefinition.builder()
+				.enabled(true)
+				.aliases(List.of("identica help", "auth help"))
+				.build();
+
+		Command<TestSender> command = commandManager.commandBuilder("original")
+				.literal("help")
+				.meta(CommandantKeys.DEFINITION_ID, "help")
+				.handler(ctx -> {})
+				.build();
+
+		List<Command<TestSender>> built = Commandant.process(command, commandManager)
+				.withDefinition(definition, new TestAdapter(), List.of("identica", "auth"))
+				.build();
+
+		assertEquals(1, built.size());
+		assertEquals(List.of("auth"), new ArrayList<>(built.get(0).rootComponent().alternativeAliases()));
 	}
 
 	@Test

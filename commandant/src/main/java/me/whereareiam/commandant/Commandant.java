@@ -89,7 +89,29 @@ public final class Commandant {
 				@Nullable D definition,
 				@NotNull DefinitionAdapter<D> adapter
 		) {
+			return withDefinition(definition, adapter, List.of());
+		}
+
+		/**
+		 * Apply definition-based overrides to this command with explicit root aliases.
+		 * <p>
+		 * This is useful when a command family should share one root tree but expose
+		 * multiple root labels, such as {@code /identica} and {@code /auth}.
+		 *
+		 * @param definition  the definition to apply (can be null)
+		 * @param adapter     adapter for extracting values from the definition
+		 * @param rootAliases root aliases for the shared command tree
+		 * @param <D>         definition type
+		 * @return builder processor for fluent API
+		 */
+		@NotNull
+		public <D> BuilderProcessor<S> withDefinition(
+				@Nullable D definition,
+				@NotNull DefinitionAdapter<D> adapter,
+				@NotNull List<String> rootAliases
+		) {
 			Objects.requireNonNull(adapter, "adapter");
+			Objects.requireNonNull(rootAliases, "rootAliases");
 
 			String defId = command.commandMeta()
 					.optional(CommandantKeys.DEFINITION_ID)
@@ -104,7 +126,7 @@ public final class Commandant {
 			// Apply definition overrides
 			DefinitionParser<S, D> parser = new DefinitionParser<>(commandManager, adapter);
 			List<Command.Builder<S>> builders = parser.applyOverrides(
-					definition, defId, command, null
+					definition, defId, command, rootAliases
 			);
 
 			return new BuilderProcessor<>(builders, commandManager);

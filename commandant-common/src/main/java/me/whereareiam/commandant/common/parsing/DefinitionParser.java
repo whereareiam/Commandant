@@ -53,6 +53,31 @@ public final class DefinitionParser<S, D> {
 			@NotNull Command<S> parsedCommand,
 			@Nullable String rootCommand
 	) {
+		return applyOverrides(
+				definition,
+				definitionId,
+				parsedCommand,
+				rootCommand == null ? List.of() : List.of(rootCommand)
+		);
+	}
+
+	/**
+	 * Applies definition overrides to the parsed command and returns command builders
+	 * for all aliases defined in the definition.
+	 *
+	 * @param definition     the command definition with overrides
+	 * @param definitionId   the ID of the definition
+	 * @param parsedCommand  the command parsed from annotations
+	 * @param rootAliases    optional root aliases (e.g., "intercept" and "i")
+	 * @return list of command builders with definition overrides applied
+	 */
+	@NotNull
+	public List<Command.Builder<S>> applyOverrides(
+			@NotNull D definition,
+			@NotNull String definitionId,
+			@NotNull Command<S> parsedCommand,
+			@NotNull List<String> rootAliases
+	) {
 		if (!adapter.isEnabled(definition))
 			return List.of();
 
@@ -60,23 +85,25 @@ public final class DefinitionParser<S, D> {
 		if (aliases.isEmpty()) {
 			throw new IllegalArgumentException("Command must define at least one alias");
 		}
+		List<String> sanitizedRootAliases = sanitizeAliases(rootAliases);
+		List<String> normalizedAliases = normalizeAliases(aliases, sanitizedRootAliases);
 
 		// Extract variable components and usage tokens
 		Map<String, CommandComponent<S>> variableComponents = extractVariableComponents(parsedCommand);
 		List<ArgumentToken> usageTokens = parseUsage(adapter.getUsage(definition));
 
 		// Group aliases by structure
-		AliasStructure structure = analyzeAliases(aliases);
+		AliasStructure structure = analyzeAliases(normalizedAliases);
 
 		// Build commands for each alias type
 		List<Command.Builder<S>> builders = new ArrayList<>();
 		builders.addAll(buildSingleWordAliases(
 				definition, definitionId, parsedCommand, variableComponents,
-				usageTokens, structure.singleWord(), rootCommand
+				usageTokens, structure.singleWord(), sanitizedRootAliases
 		));
 		builders.addAll(buildMultiWordAliases(
 				definition, definitionId, parsedCommand, variableComponents,
-				usageTokens, structure.multiWord(), rootCommand
+				usageTokens, structure.multiWord(), sanitizedRootAliases
 		));
 
 		return builders;
@@ -89,7 +116,7 @@ public final class DefinitionParser<S, D> {
 			Map<String, CommandComponent<S>> variableComponents,
 			List<ArgumentToken> usageTokens,
 			List<String> aliases,
-			@Nullable String rootCommand
+			@NotNull List<String> rootAliases
 	) {
 		if (aliases.isEmpty()) return List.of();
 
@@ -98,8 +125,8 @@ public final class DefinitionParser<S, D> {
 			List<String> aliasParts = splitAlias(alias);
 			Command.Builder<S> builder;
 
-			if (rootCommand != null) {
-				builder = commandManager.commandBuilder(rootCommand);
+			if (!rootAliases.isEmpty()) {
+				builder = createRootBuilder(rootAliases);
 				for (String part : aliasParts) {
 					builder = builder.literal(part);
 				}
@@ -124,7 +151,7 @@ public final class DefinitionParser<S, D> {
 			Map<String, CommandComponent<S>> variableComponents,
 			List<ArgumentToken> usageTokens,
 			List<String> aliases,
-			@Nullable String rootCommand
+			@NotNull List<String> rootAliases
 	) {
 		if (aliases.isEmpty()) return List.of();
 
@@ -138,8 +165,8 @@ public final class DefinitionParser<S, D> {
 			if (prefix.isEmpty() || suffixes.isEmpty()) continue;
 
 			Command.Builder<S> builder;
-			if (rootCommand != null) {
-				builder = commandManager.commandBuilder(rootCommand);
+			if (!rootAliases.isEmpty()) {
+				builder = createRootBuilder(rootAliases);
 				for (String part : prefix) {
 					builder = builder.literal(part);
 				}
@@ -162,6 +189,12 @@ public final class DefinitionParser<S, D> {
 		}
 
 		return builders;
+	}
+
+	private Command.Builder<S> createRootBuilder(@NotNull List<String> rootAliases) {
+		String firstRoot = rootAliases.get(0);
+		String[] alternativeRoots = rootAliases.stream().skip(1).toArray(String[]::new);
+		return commandManager.commandBuilder(firstRoot, alternativeRoots);
 	}
 
 	@SuppressWarnings({"unchecked", "rawtypes"})
@@ -296,6 +329,31 @@ public final class DefinitionParser<S, D> {
 		return new ArrayList<>(sanitized);
 	}
 
+	private List<String> normalizeAliases(@NotNull List<String> aliases, @NotNull List<String> rootAliases) {
+		if (rootAliases.isEmpty()) return aliases;
+
+		LinkedHashSet<String> normalized = new LinkedHashSet<>();
+		for (String alias : aliases) {
+			normalized.add(stripRootAlias(alias, rootAliases));
+		}
+
+		return new ArrayList<>(normalized);
+	}
+
+	private String stripRootAlias(@NotNull String alias, @NotNull List<String> rootAliases) {
+		for (String rootAlias : rootAliases) {
+			if (alias.equalsIgnoreCase(rootAlias)) return "";
+
+			if (alias.regionMatches(true, 0, rootAlias, 0, rootAlias.length())
+					&& alias.length() > rootAlias.length()
+					&& Character.isWhitespace(alias.charAt(rootAlias.length()))) {
+				return alias.substring(rootAlias.length()).trim();
+			}
+		}
+
+		return alias;
+	}
+
 	private AliasStructure analyzeAliases(List<String> aliases) {
 		List<String> singleWord = new ArrayList<>();
 		List<String> multiWord = new ArrayList<>();
@@ -334,6 +392,9 @@ public final class DefinitionParser<S, D> {
 	}
 
 	private List<String> splitAlias(String alias) {
+		if (alias.isBlank()) {
+			return List.of();
+		}
 		return List.of(alias.trim().split("\\s+"));
 	}
 
