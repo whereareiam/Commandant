@@ -1,4 +1,4 @@
-package me.whereareiam.commandant;
+package me.whereareiam.commandant.exception;
 
 import lombok.Builder;
 import lombok.Getter;

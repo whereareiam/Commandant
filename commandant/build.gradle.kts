@@ -16,6 +16,8 @@ dependencies {
     testImplementation(libs.cloud.core)
     testImplementation(libs.cloud.cooldowns)
     testImplementation(libs.cloud.annotations)
+    testImplementation(libs.cloud.minecraft.extras)
+    testImplementation(libs.adventure.api)
     testImplementation(libs.jetbrains.annotations)
 }
 

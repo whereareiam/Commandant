@@ -1,5 +1,6 @@
-package me.whereareiam.commandant;
+package me.whereareiam.commandant.exception;
 
+import me.whereareiam.commandant.exception.format.ExceptionFormatting;
 import me.whereareiam.commandant.model.message.ExceptionMessages;
 import me.whereareiam.commandant.model.message.MessageResolver;
 import me.whereareiam.keystone.Actor;
@@ -12,7 +13,10 @@ import org.incendo.cloud.minecraft.extras.AudienceProvider;
 import org.incendo.cloud.minecraft.extras.MinecraftExceptionHandler;
 import org.incendo.cloud.parser.standard.BooleanParser;
 import org.incendo.cloud.parser.standard.StringParser;
+import org.incendo.cloud.permission.Permission;
 import org.jetbrains.annotations.NotNull;
+
+import java.util.Objects;
 
 /**
  * Utility class for registering exception handlers with Cloud command managers.
@@ -70,6 +74,40 @@ public final class ExceptionHandlerRegistrar {
 			@NotNull SerializerEngine serializer,
 			@NotNull AudienceProvider<S> audienceProvider
 	) {
+		register(
+				commandManager,
+				keys,
+				resolver,
+				serializer,
+				audienceProvider,
+				ExceptionFormatting.defaults()
+		);
+	}
+
+	/**
+	 * Registers exception handlers with key-based message resolution (locale-aware).
+	 * <p>
+	 * The MessageResolver will be called with Actor and key to resolve localized messages.
+	 * <p>
+	 * Placeholder name: <code>content</code> (format configured in SerializerEngine)
+	 *
+	 * @param commandManager       The command manager to register handlers with
+	 * @param keys                 The exception message keys to use
+	 * @param resolver             Function to resolve message by actor and key
+	 * @param serializer           The serializer engine for formatting messages
+	 * @param audienceProvider     Provider to convert sender to Audience
+	 * @param formatting           Value formatting registry for exception placeholders
+	 * @param <S>                  The sender type (must extend Actor at runtime)
+	 * @throws ClassCastException if S does not extend Actor
+	 */
+	public static <S> void register(
+			@NotNull CommandManager<S> commandManager,
+			@NotNull ExceptionMessageKeys keys,
+			@NotNull MessageResolver resolver,
+			@NotNull SerializerEngine serializer,
+			@NotNull AudienceProvider<S> audienceProvider,
+			@NotNull ExceptionFormatting formatting
+	) {
 		MinecraftExceptionHandler.create(audienceProvider)
 				.handler(ArgumentParseException.class, (formatter, exception) -> {
 					Actor sender = (Actor) exception.context().sender();
@@ -103,7 +141,7 @@ public final class ExceptionHandlerRegistrar {
 				})
 				.handler(NoPermissionException.class, (formatter, exception) -> {
 					Actor sender = (Actor) exception.context().sender();
-					String permission = exception.exception().missingPermission().permissionString();
+					String permission = formatContent(exception.exception().missingPermission(), formatting);
 					String message = resolver.resolve(sender, keys.getNoPermission());
 					return serializer.serialize(sender, message, builder ->
 							builder.placeholder("content", permission));
@@ -145,6 +183,37 @@ public final class ExceptionHandlerRegistrar {
 			@NotNull SerializerEngine serializer,
 			@NotNull AudienceProvider<S> audienceProvider
 	) {
+		register(
+				commandManager,
+				messages,
+				serializer,
+				audienceProvider,
+				ExceptionFormatting.defaults()
+		);
+	}
+
+	/**
+	 * Registers exception handlers with static message model (non-locale-aware).
+	 * <p>
+	 * Uses ExceptionMessages directly without translation.
+	 * <p>
+	 * Placeholder name: <code>content</code> (format configured in SerializerEngine)
+	 *
+	 * @param commandManager       The command manager to register handlers with
+	 * @param messages             The exception messages to use
+	 * @param serializer           The serializer engine for formatting messages
+	 * @param audienceProvider     Provider to convert sender to Audience
+	 * @param formatting           Value formatting registry for exception placeholders
+	 * @param <S>                  The sender type (must extend Actor at runtime)
+	 * @throws ClassCastException if S does not extend Actor
+	 */
+	public static <S> void register(
+			@NotNull CommandManager<S> commandManager,
+			@NotNull ExceptionMessages messages,
+			@NotNull SerializerEngine serializer,
+			@NotNull AudienceProvider<S> audienceProvider,
+			@NotNull ExceptionFormatting formatting
+	) {
 		MinecraftExceptionHandler.create(audienceProvider)
 				.handler(ArgumentParseException.class, (formatter, exception) -> {
 					Actor sender = (Actor) exception.context().sender();
@@ -171,7 +240,7 @@ public final class ExceptionHandlerRegistrar {
 				})
 				.handler(NoPermissionException.class, (formatter, exception) -> {
 					Actor sender = (Actor) exception.context().sender();
-					String permission = exception.exception().missingPermission().permissionString();
+					String permission = formatContent(exception.exception().missingPermission(), formatting);
 					return serializer.serialize(sender, messages.getNoPermission(), builder ->
 							builder.placeholder("content", permission));
 				})
@@ -188,5 +257,12 @@ public final class ExceptionHandlerRegistrar {
 							builder.placeholder("content", errorMessage));
 				})
 				.registerTo(commandManager);
+	}
+
+	private static @NotNull String formatContent(@NotNull Object value, @NotNull ExceptionFormatting formatting) {
+		String formatted = formatting.format(value);
+		if (formatted != null) return formatted;
+		if (value instanceof Permission permission) return permission.permissionString();
+		return Objects.toString(value, "");
 	}
 }
