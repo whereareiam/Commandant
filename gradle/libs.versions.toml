@@ -3,7 +3,7 @@
 # general
 lombok = "1.18.42"
 jetbrains-annotations = "26.0.2"
-keystone = "dev-90d39d2"
+keystone = "dev-fcd11fd"
 
 # cloud
 cloud = "2.0.0"
